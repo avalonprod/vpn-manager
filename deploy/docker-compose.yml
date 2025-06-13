@@ -1,0 +1,14 @@
+services:
+  app:
+    image: app
+    ports:
+    - "8000:8000"
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: neon_guard
+    restart: always
+    env_file:
+      - ../.env
+    volumes:
+      - ./.bin/:/app/
