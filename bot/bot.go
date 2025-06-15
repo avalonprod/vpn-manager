@@ -2,11 +2,13 @@ package bot
 
 import (
 	"context"
+	"net/http"
 	"vpn-manager/pkg/logger"
 	"vpn-manager/servers"
 	"vpn-manager/users"
 
 	"github.com/go-telegram/bot"
+	"github.com/gorilla/mux"
 )
 
 type IUsersService interface {
@@ -40,7 +42,7 @@ func NewTGBot(bot *bot.Bot, logger logger.ILogger, usersService IUsersService, s
 	}
 }
 
-func (tb *TGBot) Run(ctx context.Context) {
+func (tb *TGBot) Run(ctx context.Context, port string) {
 	tb.bot.RegisterHandler(bot.HandlerTypeMessageText, StartCommand, bot.MatchTypeExact, tb.handleStart)
 	tb.bot.RegisterHandler(bot.HandlerTypeMessageText, SupportCommand, bot.MatchTypeExact, tb.handleSupport)
 	tb.bot.RegisterHandler(bot.HandlerTypeCallbackQueryData, ActivateTrialAccessCallback, bot.MatchTypeExact, tb.handleActivateTrialAccessCallback)
@@ -49,5 +51,16 @@ func (tb *TGBot) Run(ctx context.Context) {
 	tb.bot.RegisterHandler(bot.HandlerTypeCallbackQueryData, ConnectCallback, bot.MatchTypePrefix, tb.handleConnectCallback)
 	tb.bot.RegisterHandler(bot.HandlerTypeCallbackQueryData, LocationListCallback, bot.MatchTypePrefix, tb.handleLocationsList)
 
-	tb.bot.Start(ctx)
+	go tb.bot.StartWebhook(ctx)
+
+	r := mux.NewRouter()
+
+	r.HandleFunc("/webhook", tb.bot.WebhookHandler())
+
+	srv := &http.Server{
+		Addr:    ":" + port,
+		Handler: r,
+	}
+
+	srv.ListenAndServe()
 }

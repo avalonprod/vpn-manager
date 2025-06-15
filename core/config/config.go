@@ -6,10 +6,12 @@ import (
 
 type (
 	Config struct {
-		TelegramAccessToken string
-		ApiUrl              string
-		Port                string
-		MongoDB             MongoDB
+		TelegramAccessToken  string
+		TelegramWebhookToken string
+		TelegramWebhookPort  string
+		ApiUrl               string
+		Port                 string
+		MongoDB              MongoDB
 	}
 	MongoDB struct {
 		URI      string
@@ -23,6 +25,8 @@ func MustLoad() *Config {
 	var cfg Config
 
 	cfg.TelegramAccessToken = os.Getenv("TELEGRAM_ACCESS_TOKEN")
+	cfg.TelegramWebhookToken = os.Getenv("TELEGRAM_WEBHOOK_TOKEN")
+	cfg.TelegramWebhookPort = os.Getenv("TELEGRAM_WEBHOOK_PORT")
 	cfg.ApiUrl = os.Getenv("API_URL")
 	cfg.Port = os.Getenv("PORT")
 	cfg.MongoDB.URI = os.Getenv("MONGODB_URI")

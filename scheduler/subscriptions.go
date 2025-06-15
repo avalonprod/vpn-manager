@@ -25,7 +25,7 @@ type INotifier interface {
 	Notify(ctx context.Context, chatId int64, msg string) error
 }
 
-type scheduler struct {
+type Scheduler struct {
 	subscriptionsService ISubscriptionsService
 	peersService         IPeersService
 	serversService       IServersService
@@ -33,8 +33,8 @@ type scheduler struct {
 	logger               logger.ILogger
 }
 
-func NewScheduler(subscriptionsService ISubscriptionsService, peersService IPeersService, serversService IServersService, notifier INotifier, logger logger.ILogger) *scheduler {
-	return &scheduler{
+func NewScheduler(subscriptionsService ISubscriptionsService, peersService IPeersService, serversService IServersService, notifier INotifier, logger logger.ILogger) *Scheduler {
+	return &Scheduler{
 		subscriptionsService: subscriptionsService,
 		peersService:         peersService,
 		serversService:       serversService,
@@ -43,7 +43,7 @@ func NewScheduler(subscriptionsService ISubscriptionsService, peersService IPeer
 	}
 }
 
-func (s *scheduler) CheckExpiredSubscriptions(ctx context.Context) {
+func (s *Scheduler) CheckExpiredSubscriptions(ctx context.Context) {
 	subs, err := s.subscriptionsService.GetExpiredSubscriptions(ctx)
 	if err != nil {
 		s.logger.Errorf("failed to get expired subs: %v", err)

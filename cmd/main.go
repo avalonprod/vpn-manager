@@ -23,10 +23,19 @@ import (
 	"github.com/go-telegram/bot"
 )
 
+const timeout = 5 * time.Second
+
 func main() {
 	cfg := config.MustLoad()
 
-	bot, err := bot.New(cfg.TelegramAccessToken)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	opts := []bot.Option{
+		bot.WithWebhookSecretToken(cfg.TelegramWebhookToken),
+	}
+
+	bot, err := bot.New(cfg.TelegramAccessToken, opts...)
 	if err != nil {
 		panic(err)
 	}
@@ -36,41 +45,15 @@ func main() {
 		panic(err)
 	}
 
-	notifier := notifier.NewNotifier(bot)
-
+	mongodb := mongodbClient.Database(cfg.MongoDB.Name)
 	logger := logger.NewLogger()
 
-	mongodb := mongodbClient.Database(cfg.MongoDB.Name)
-
-	usersStore := users.NewStore(mongodb)
-	usersService := users.NewService(usersStore)
-
-	peersStore := peers.NewStore(mongodb)
-	peersService := peers.NewService(peersStore)
-
-	serversStore := servers.NewStore(mongodb)
-	serversService := servers.NewService(serversStore, peersService, cfg.ApiUrl)
-
-	subscriptionsStore := subscriptions.NewStore(mongodb)
-	subscriptionsService := subscriptions.NewService(subscriptionsStore)
-
+	notifier := notifier.NewNotifier(bot)
+	usersService := users.NewService(users.NewStore(mongodb))
+	peersService := peers.NewService(peers.NewStore(mongodb))
+	serversService := servers.NewService(servers.NewStore(mongodb), peersService, cfg.ApiUrl)
+	subscriptionsService := subscriptions.NewService(subscriptions.NewStore(mongodb))
 	scheduler := scheduler.NewScheduler(subscriptionsService, peersService, serversService, notifier, logger)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	ticker := time.NewTicker(3 * time.Hour)
-	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				scheduler.CheckExpiredSubscriptions(context.Background())
-			case <-ctx.Done():
-				ticker.Stop()
-				return
-			}
-		}
-	}()
 
 	handler := api.NewHandler(peersService, cfg.ApiUrl)
 
@@ -80,20 +63,14 @@ func main() {
 		Port: cfg.Port,
 	}, handler.RegisterRoutes())
 
-	go func() {
-		srv.Run()
-	}()
-
-	go func() {
-		tgBot.Run(context.Background())
-	}()
+	go runScheduler(ctx, scheduler)
+	go srv.Run()
+	go tgBot.Run(ctx, cfg.TelegramWebhookPort)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
 
 	<-quit
-
-	const timeout = 5 * time.Second
 
 	ctx, shutdown := context.WithTimeout(context.Background(), timeout)
 	defer shutdown()
@@ -104,5 +81,18 @@ func main() {
 
 	if err := mongodbClient.Disconnect(ctx); err != nil {
 		log.Printf("error disconnect to mongodbClient. err: %v", err)
+	}
+}
+
+func runScheduler(ctx context.Context, scheduler *scheduler.Scheduler) {
+	ticker := time.NewTicker(3 * time.Hour)
+	for {
+		select {
+		case <-ticker.C:
+			scheduler.CheckExpiredSubscriptions(ctx)
+		case <-ctx.Done():
+			ticker.Stop()
+			return
+		}
 	}
 }
