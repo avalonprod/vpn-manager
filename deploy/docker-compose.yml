@@ -3,6 +3,7 @@ services:
     image: app
     ports:
     - "8000:8000"
+    - "2000:2000"
     build:
       context: ..
       dockerfile: deploy/Dockerfile
