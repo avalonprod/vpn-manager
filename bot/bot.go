@@ -62,5 +62,8 @@ func (tb *TGBot) Run(ctx context.Context, port string) {
 		Handler: r,
 	}
 
-	srv.ListenAndServe()
+	if err := srv.ListenAndServe(); err != nil {
+		tb.logger.Errorf("Failed to start webhook server: %v", err)
+		return
+	}
 }
