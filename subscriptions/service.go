@@ -23,17 +23,8 @@ func NewService(store IStore) *service {
 }
 
 func (s *service) CreateTrialSubscription(ctx context.Context, userID int64) error {
-	isHas, err := s.store.HasTrialSubscription(ctx, userID)
-	if err != nil {
-		return err
-	}
-
-	if isHas {
-		return ErrTrialAccessAlreadyActivated
-	}
-
 	startsAt := time.Now().UTC()
-	err = s.store.Create(ctx, Subscription{
+	err := s.store.Create(ctx, Subscription{
 		UserID:    userID,
 		Plan:      PlanTrial,
 		Active:    true,
