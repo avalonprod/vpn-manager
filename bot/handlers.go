@@ -2,237 +2,183 @@ package bot
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strings"
-	"vpn-manager/subscriptions"
 	"vpn-manager/users"
 
-	"github.com/go-telegram/bot"
-	"github.com/go-telegram/bot/models"
+	"gopkg.in/telebot.v4"
 )
 
-func (tb *TGBot) handleStart(ctx context.Context, b *bot.Bot, update *models.Update) {
-	if err := tb.usersService.Register(ctx, users.CreateUserInput{
-		ID:        update.Message.From.ID,
-		Username:  update.Message.From.Username,
-		FirstName: update.Message.From.FirstName,
+func (b *Bot) handleStart(c telebot.Context) error {
+	user := c.Sender()
+	if err := b.usersService.Register(context.Background(), users.CreateUserInput{
+		ID:        user.ID,
+		Username:  user.Username,
+		FirstName: user.FirstName,
 	}); err != nil {
-		tb.logger.Error(err)
-		tb.sendError(ctx, b, update.Message.Chat.ID, ErrDefault)
-		return
+		b.logger.Error(err)
+		return b.replyError(c, ErrDefault)
 	}
 
-	activateTrialAccessButton := &models.InlineKeyboardButton{
-		Text:         "Попробовать бесплатно",
-		CallbackData: ActivateTrialAccessCallback,
-	}
+	keyword := &telebot.ReplyMarkup{}
 
-	buySubscriptionButton := &models.InlineKeyboardButton{
-		Text:         "Купить от 190р в месяц",
-		CallbackData: SubscribeCallback,
-	}
-
-	keyboard := models.InlineKeyboardMarkup{
-		InlineKeyboard: [][]models.InlineKeyboardButton{
-			{*activateTrialAccessButton},
-			{*buySubscriptionButton},
+	keyword.Inline(
+		telebot.Row{
+			trialAccessButton,
 		},
-	}
-
-	b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:      update.Message.Chat.ID,
-		Text:        Msg.AlertStart,
-		ReplyMarkup: &keyboard,
-		ParseMode:   models.ParseModeHTML,
-	})
-
-}
-
-func (tb *TGBot) handleSupport(ctx context.Context, b *bot.Bot, update *models.Update) {
-	b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: update.Message.Chat.ID,
-		Text:   Msg.AlertSupport,
-	})
-}
-
-func (tb *TGBot) handleSupportCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
-	b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID: update.CallbackQuery.Message.Message.Chat.ID,
-		Text:   Msg.AlertSupport,
-	})
-
-	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
-		CallbackQueryID: update.CallbackQuery.ID,
-	})
-}
-
-func (tb *TGBot) handleActivateTrialAccessCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
-	err := tb.subscriptionsService.CreateTrialSubscription(ctx, update.CallbackQuery.Message.Message.Chat.ID)
-	if err != nil {
-		if errors.Is(err, subscriptions.ErrTrialAccessAlreadyActivated) {
-			tb.logger.Info(err)
-			tb.sendError(ctx, b, update.CallbackQuery.Message.Message.Chat.ID, ErrTrialAccessAlreadyActivated)
-			return
-		}
-		tb.logger.Error(err)
-		tb.sendError(ctx, b, update.CallbackQuery.Message.Message.Chat.ID, ErrDefault)
-		return
-	}
-
-	activateTrialAccessButton := &models.InlineKeyboardButton{
-		Text:         "Выбрать регион",
-		CallbackData: LocationListCallback,
-	}
-
-	buySubscriptionButton := &models.InlineKeyboardButton{
-		Text:         "Продлить подписку",
-		CallbackData: SubscribeCallback,
-	}
-
-	keyboard := models.InlineKeyboardMarkup{
-		InlineKeyboard: [][]models.InlineKeyboardButton{
-			{*activateTrialAccessButton},
-			{*buySubscriptionButton},
+		telebot.Row{
+			subscribeButton,
 		},
-	}
+	)
 
-	b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:      update.CallbackQuery.Message.Message.Chat.ID,
-		Text:        Msg.AlertTrialAccess,
-		ReplyMarkup: &keyboard,
-		ParseMode:   models.ParseModeHTML,
+	b.pushState(c.Sender().ID, Screen{
+		Text:     Msg.AlertStart,
+		Keyboard: keyword,
 	})
 
-	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
-		CallbackQueryID: update.CallbackQuery.ID,
-	})
+	return c.Send(Msg.AlertStart, keyword)
 }
 
-func (tb *TGBot) handleSubscribeCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
-	oneMonthSubscription := &models.InlineKeyboardButton{
-		Text:         "💳 1 месяц - 500 ₽",
-		CallbackData: AppListCallback,
+func (b *Bot) handleTrialAccess(c telebot.Context) error {
+	err := b.subscriptionsService.CreateTrialSubscription(context.Background(), c.Sender().ID)
+	if err != nil {
+		b.logger.Error(err)
+		return b.replyError(c, ErrDefault)
 	}
 
-	sixMonthSubscription := &models.InlineKeyboardButton{
-		Text:         "💳 6 мес. + 2 мес. 🎁 - 350 ₽ / мес",
-		CallbackData: AppListCallback,
-	}
-
-	oneYearSubscription := &models.InlineKeyboardButton{
-		Text:         "💳 1 год + 3 мес. 🎁 - 280 ₽ / мес",
-		CallbackData: AppListCallback,
-	}
-
-	twoYearsSubscription := &models.InlineKeyboardButton{
-		Text:         "💳 2 года + 6 мес. 🎁 - 190 ₽ / мес",
-		CallbackData: AppListCallback,
-	}
-
-	supportButton := &models.InlineKeyboardButton{
-		Text:         "❓ Поддержка",
-		CallbackData: SupportCallback,
-	}
-
-	keyboard := models.InlineKeyboardMarkup{
-		InlineKeyboard: [][]models.InlineKeyboardButton{
-			{*oneMonthSubscription},
-			{*sixMonthSubscription},
-			{*oneYearSubscription},
-			{*twoYearsSubscription},
-			{*supportButton},
+	keyword := &telebot.ReplyMarkup{}
+	keyword.Inline(
+		telebot.Row{
+			appsListButton,
 		},
-	}
-
-	b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:      update.CallbackQuery.Message.Message.Chat.ID,
-		Text:        Msg.AlertSubscriptions,
-		ReplyMarkup: &keyboard,
-		ParseMode:   models.ParseModeHTML,
-	})
-
-	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
-		CallbackQueryID: update.CallbackQuery.ID,
-	})
-}
-
-func (tb *TGBot) handleConnectCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
-	const prefix = "connect_"
-	if !strings.HasPrefix(update.CallbackQuery.Data, prefix) {
-		return
-	}
-
-	serverID := strings.TrimPrefix(update.CallbackQuery.Data, prefix)
-	confContent, err := tb.serversService.RegisterNewPeer(ctx, update.CallbackQuery.Message.Message.Chat.ID, serverID)
-	if err != nil {
-		tb.logger.Error(err)
-		tb.sendError(ctx, b, update.CallbackQuery.Message.Message.Chat.ID, ErrDefault)
-	}
-
-	deepLinkButton := &models.InlineKeyboardButton{
-		Text: "Автонастройка",
-		URL:  confContent.ConfigUrl,
-	}
-
-	supportButton := &models.InlineKeyboardButton{
-		Text:         "❓ Поддержка",
-		CallbackData: SupportCallback,
-	}
-
-	keyboard := models.InlineKeyboardMarkup{
-		InlineKeyboard: [][]models.InlineKeyboardButton{
-			{*deepLinkButton},
-			{*supportButton},
+		telebot.Row{
+			backButton,
+			renewSubscriptionButton,
 		},
-	}
+	)
 
-	_, err = b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:      update.CallbackQuery.Message.Message.Chat.ID,
-		Text:        Msg.AlertListApp,
-		ReplyMarkup: &keyboard,
-		ParseMode:   models.ParseModeHTML,
+	b.pushState(c.Sender().ID, Screen{
+		Text:     Msg.AlertTrialAccess,
+		Keyboard: keyword,
 	})
 
-	if err != nil {
-		tb.logger.Error(err)
-		tb.sendError(ctx, b, update.CallbackQuery.Message.Message.Chat.ID, ErrDefault)
-	}
-
-	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
-		CallbackQueryID: update.CallbackQuery.ID,
-	})
+	return c.Edit(Msg.AlertTrialAccess, keyword)
 }
 
-func (tb *TGBot) handleLocationsList(ctx context.Context, b *bot.Bot, update *models.Update) {
-	servers, err := tb.serversService.GetAllServers(ctx)
+func (b *Bot) handleAppsList(c telebot.Context) error {
+	userID := c.Sender().ID
+	keyword := &telebot.ReplyMarkup{}
+
+	keyword.Inline(
+		telebot.Row{
+			{Text: "📱 iPhone / iPad", URL: fmt.Sprintf("%s/apps?user_id=%d&os=ios", b.apiUrl, userID)},
+			{Text: "💻 MacOs", URL: fmt.Sprintf("%s/apps?user_id=%d&os=macos", b.apiUrl, userID)},
+		},
+		telebot.Row{
+			backButton,
+			supportButton,
+		},
+	)
+
+	b.pushState(c.Sender().ID, Screen{
+		Text:     Msg.AlertListApp,
+		Keyboard: keyword,
+	})
+
+	return c.Edit(Msg.AlertListApp, keyword)
+}
+
+func (b *Bot) handleSubscribe(c telebot.Context) error {
+	keyword := &telebot.ReplyMarkup{}
+
+	keyword.Inline(
+		telebot.Row{
+			{Text: "💳 1 месяц - 500 ₽"},
+		},
+		telebot.Row{
+			{Text: "💳 6 мес. + 2 мес. 🎁 - 350 ₽ / мес"},
+		},
+		telebot.Row{
+			{Text: "💳 1 год + 3 мес. 🎁 - 280 ₽ / мес"},
+		},
+		telebot.Row{
+			{Text: "💳 2 года + 6 мес. 🎁 - 190 ₽ / мес"},
+		},
+		telebot.Row{
+			backButton,
+			supportButton,
+		},
+	)
+
+	b.pushState(c.Sender().ID, Screen{
+		Text:     Msg.AlertSubscriptions,
+		Keyboard: keyword,
+	})
+
+	return c.Edit(Msg.AlertSubscriptions, keyword)
+}
+
+func (b *Bot) handleSuccess(c telebot.Context) error {
+	keyword := &telebot.ReplyMarkup{}
+
+	keyword.Inline(
+		telebot.Row{
+			renewSubscriptionButton,
+			supportButton,
+		},
+	)
+
+	return c.Edit(Msg.AlertSuccess, keyword)
+}
+
+func (b *Bot) SendLocationsList(userID int64) error {
+	servers, err := b.serversService.GetAllActiveServers(context.Background())
 	if err != nil {
-		tb.logger.Errorf("error get all servers: %v", err)
-		tb.sendError(ctx, b, update.CallbackQuery.Message.Message.Chat.ID, ErrDefault)
+		b.logger.Error(err)
+		return err
 	}
 
-	buttons := make([][]models.InlineKeyboardButton, 0, len(servers))
+	keyword := &telebot.ReplyMarkup{}
+
+	buttons := []telebot.Row{}
 
 	for _, server := range servers {
-		serverButton := &models.InlineKeyboardButton{
-			Text:         server.Location,
-			CallbackData: fmt.Sprintf("connect_%s", server.ID),
-		}
-
-		buttons = append(buttons, []models.InlineKeyboardButton{*serverButton})
+		buttons = append(buttons, telebot.Row{
+			{
+				Text: server.Location,
+				URL:  fmt.Sprintf("%s/setup?user_id=%d&server_id=%s", b.apiUrl, userID, server.ID),
+			},
+		})
 	}
 
-	keyboard := models.InlineKeyboardMarkup{
-		InlineKeyboard: buttons,
-	}
-
-	b.SendMessage(ctx, &bot.SendMessageParams{
-		ChatID:      update.CallbackQuery.Message.Message.Chat.ID,
-		Text:        Msg.AlertLocations,
-		ReplyMarkup: &keyboard,
+	buttons = append(buttons, telebot.Row{
+		backButton,
+		supportButton,
 	})
+	keyword.Inline(buttons...)
 
-	b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{
-		CallbackQueryID: update.CallbackQuery.ID,
-	})
+	user := &telebot.User{ID: userID}
+	_, err = b.bot.Send(user, Msg.AlertSetupInstruction, keyword)
+
+	return err
+}
+
+func (b *Bot) SendPostImportInstructions(userID int64) error {
+	keyword := &telebot.ReplyMarkup{}
+
+	keyword.Inline(
+		telebot.Row{
+			manualSettingsButton,
+		},
+		telebot.Row{
+			successButton,
+		},
+		telebot.Row{
+			supportButton,
+		},
+	)
+
+	user := &telebot.User{ID: userID}
+	_, err := b.bot.Send(user, Msg.AlertPostImportInstructions, keyword)
+
+	return err
 }

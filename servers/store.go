@@ -20,9 +20,11 @@ func NewStore(db *mongo.Database) *store {
 	}
 }
 
-func (s *store) GetAll(ctx context.Context) ([]Server, error) {
+func (s *store) GetAllActiveServers(ctx context.Context) ([]Server, error) {
 	var servers []Server
-	cursor, err := s.db.Find(ctx, map[string]interface{}{})
+	filter := bson.M{"is_active": true}
+
+	cursor, err := s.db.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}

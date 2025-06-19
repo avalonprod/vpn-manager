@@ -15,7 +15,7 @@ import (
 )
 
 type IStore interface {
-	GetAll(ctx context.Context) ([]Server, error)
+	GetAllActiveServers(ctx context.Context) ([]Server, error)
 	GetByID(ctx context.Context, serverID string) (Server, error)
 }
 
@@ -46,8 +46,8 @@ type RegisterResponse struct {
 }
 
 type RegisterNewPeerOutput struct {
-	Location  string
-	ConfigUrl string
+	Location string
+	PeerID   string
 }
 
 func (s *service) RegisterNewPeer(ctx context.Context, userID int64, serverID string) (RegisterNewPeerOutput, error) {
@@ -112,13 +112,13 @@ func (s *service) RegisterNewPeer(ctx context.Context, userID int64, serverID st
 	}
 
 	return RegisterNewPeerOutput{
-		Location:  server.Location,
-		ConfigUrl: fmt.Sprintf("%s/peers/%s", s.apiUrl, peerID),
+		Location: server.Location,
+		PeerID:   peerID,
 	}, nil
 }
 
-func (s *service) GetAllServers(ctx context.Context) ([]Server, error) {
-	return s.store.GetAll(ctx)
+func (s *service) GetAllActiveServers(ctx context.Context) ([]Server, error) {
+	return s.store.GetAllActiveServers(ctx)
 }
 
 func (s *service) GetByID(ctx context.Context, serverID string) (Server, error) {

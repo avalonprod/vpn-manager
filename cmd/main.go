@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 	"vpn-manager/api"
-	tgbot "vpn-manager/bot"
+	"vpn-manager/bot"
 	"vpn-manager/core/config"
 	"vpn-manager/notifier"
 	"vpn-manager/peers"
@@ -20,7 +21,7 @@ import (
 	"vpn-manager/subscriptions"
 	"vpn-manager/users"
 
-	"github.com/go-telegram/bot"
+	"gopkg.in/telebot.v4"
 )
 
 const timeout = 5 * time.Second
@@ -31,13 +32,24 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	opts := []bot.Option{
-		bot.WithWebhookSecretToken(cfg.TelegramWebhookToken),
+	pref := telebot.Settings{
+		Token: cfg.TelegramAccessToken,
+		Poller: &telebot.Webhook{
+			Listen:           fmt.Sprintf(":%s", cfg.TelegramWebhookPort),
+			SecretToken:      cfg.TelegramWebhookToken,
+			IgnoreSetWebhook: true,
+			Endpoint: &telebot.WebhookEndpoint{
+				PublicURL: fmt.Sprintf("%s/webhook", cfg.ApiUrl),
+			},
+		},
+
+		ParseMode: telebot.ModeHTML,
 	}
 
-	bot, err := bot.New(cfg.TelegramAccessToken, opts...)
+	b, err := telebot.NewBot(pref)
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
+		return
 	}
 
 	mongodbClient, err := mongodb.NewConnection(cfg.MongoDB.URI, cfg.MongoDB.Username, cfg.MongoDB.Password)
@@ -48,16 +60,16 @@ func main() {
 	mongodb := mongodbClient.Database(cfg.MongoDB.Name)
 	logger := logger.NewLogger()
 
-	notifier := notifier.NewNotifier(bot)
+	notifier := notifier.NewNotifier(b)
 	usersService := users.NewService(users.NewStore(mongodb))
 	peersService := peers.NewService(peers.NewStore(mongodb))
 	serversService := servers.NewService(servers.NewStore(mongodb), peersService, cfg.ApiUrl)
 	subscriptionsService := subscriptions.NewService(subscriptions.NewStore(mongodb))
 	scheduler := scheduler.NewScheduler(subscriptionsService, peersService, serversService, notifier, logger)
 
-	handler := api.NewHandler(peersService, cfg.ApiUrl)
+	bot := bot.NewBot(b, logger, usersService, serversService, subscriptionsService, cfg.ApiUrl)
 
-	tgBot := tgbot.NewTGBot(bot, logger, usersService, serversService, subscriptionsService)
+	handler := api.NewHandler(peersService, serversService, bot, cfg.ApiUrl, cfg.Apps)
 
 	srv := server.NewServer(&server.HttpConfig{
 		Port: cfg.Port,
@@ -65,7 +77,7 @@ func main() {
 
 	go runScheduler(ctx, scheduler)
 	go srv.Run()
-	go tgBot.Run(ctx, cfg.TelegramWebhookPort)
+	go bot.Run()
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)

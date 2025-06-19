@@ -22,7 +22,7 @@ type IServersService interface {
 }
 
 type INotifier interface {
-	Notify(ctx context.Context, chatId int64, msg string) error
+	Notify(ctx context.Context, userID int64, msg string) error
 }
 
 type Scheduler struct {

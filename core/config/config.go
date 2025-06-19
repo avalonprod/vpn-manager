@@ -12,6 +12,10 @@ type (
 		ApiUrl               string
 		Port                 string
 		MongoDB              MongoDB
+		Apps                 Apps
+	}
+	Apps struct {
+		AppStoreURL string
 	}
 	MongoDB struct {
 		URI      string
@@ -24,6 +28,7 @@ type (
 func MustLoad() *Config {
 	var cfg Config
 
+	cfg.Apps.AppStoreURL = os.Getenv("APPSTORE_URL")
 	cfg.TelegramAccessToken = os.Getenv("TELEGRAM_ACCESS_TOKEN")
 	cfg.TelegramWebhookToken = os.Getenv("TELEGRAM_WEBHOOK_TOKEN")
 	cfg.TelegramWebhookPort = os.Getenv("TELEGRAM_WEBHOOK_PORT")

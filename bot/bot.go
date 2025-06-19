@@ -2,13 +2,11 @@ package bot
 
 import (
 	"context"
-	"net/http"
 	"vpn-manager/pkg/logger"
 	"vpn-manager/servers"
 	"vpn-manager/users"
 
-	"github.com/go-telegram/bot"
-	"github.com/gorilla/mux"
+	"gopkg.in/telebot.v4"
 )
 
 type IUsersService interface {
@@ -21,49 +19,49 @@ type ISubscriptionsService interface {
 
 type IServersService interface {
 	RegisterNewPeer(ctx context.Context, userID int64, serverID string) (servers.RegisterNewPeerOutput, error)
-	GetAllServers(ctx context.Context) ([]servers.Server, error)
+	GetAllActiveServers(ctx context.Context) ([]servers.Server, error)
 }
 
-type TGBot struct {
-	bot                  *bot.Bot
+type Bot struct {
+	bot                  *telebot.Bot
 	logger               logger.ILogger
 	usersService         IUsersService
 	serversService       IServersService
 	subscriptionsService ISubscriptionsService
+	apiUrl               string
 }
 
-func NewTGBot(bot *bot.Bot, logger logger.ILogger, usersService IUsersService, serversService IServersService, subscriptionsService ISubscriptionsService) *TGBot {
-	return &TGBot{
+func NewBot(
+	bot *telebot.Bot,
+	logger logger.ILogger,
+	usersService IUsersService,
+	serversService IServersService,
+	subscriptionsService ISubscriptionsService,
+	apiUrl string,
+) *Bot {
+	return &Bot{
 		bot:                  bot,
 		logger:               logger,
 		usersService:         usersService,
 		serversService:       serversService,
 		subscriptionsService: subscriptionsService,
+		apiUrl:               apiUrl,
 	}
 }
 
-func (tb *TGBot) Run(ctx context.Context, port string) {
-	tb.bot.RegisterHandler(bot.HandlerTypeMessageText, StartCommand, bot.MatchTypeExact, tb.handleStart)
-	tb.bot.RegisterHandler(bot.HandlerTypeMessageText, SupportCommand, bot.MatchTypeExact, tb.handleSupport)
-	tb.bot.RegisterHandler(bot.HandlerTypeCallbackQueryData, ActivateTrialAccessCallback, bot.MatchTypeExact, tb.handleActivateTrialAccessCallback)
-	tb.bot.RegisterHandler(bot.HandlerTypeCallbackQueryData, SupportCallback, bot.MatchTypeExact, tb.handleSupportCallback)
-	tb.bot.RegisterHandler(bot.HandlerTypeCallbackQueryData, SubscribeCallback, bot.MatchTypeExact, tb.handleSubscribeCallback)
-	tb.bot.RegisterHandler(bot.HandlerTypeCallbackQueryData, ConnectCallback, bot.MatchTypePrefix, tb.handleConnectCallback)
-	tb.bot.RegisterHandler(bot.HandlerTypeCallbackQueryData, LocationListCallback, bot.MatchTypePrefix, tb.handleLocationsList)
+func (b *Bot) Run() {
+	b.bot.Handle("/start", b.handleStart)
+	b.bot.Handle(&trialAccessButton, b.handleTrialAccess)
+	b.bot.Handle(&appsListButton, b.handleAppsList)
+	b.bot.Handle(&subscribeButton, b.handleSubscribe)
+	b.bot.Handle(&renewSubscriptionButton, b.handleSubscribe)
+	b.bot.Handle(&successButton, b.handleSuccess)
 
-	go tb.bot.StartWebhook(ctx)
+	b.bot.Handle(&backButton, b.handleBack)
 
-	r := mux.NewRouter()
+	b.bot.Start()
+}
 
-	r.HandleFunc("/webhook", tb.bot.WebhookHandler())
-
-	srv := &http.Server{
-		Addr:    ":" + port,
-		Handler: r,
-	}
-
-	if err := srv.ListenAndServe(); err != nil {
-		tb.logger.Errorf("Failed to start webhook server: %v", err)
-		return
-	}
+func (b *Bot) replyError(c telebot.Context, msg string) error {
+	return c.Send(msg)
 }
