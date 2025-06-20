@@ -156,6 +156,10 @@ func (b *Bot) SendLocationsList(userID int64) error {
 	})
 	keyword.Inline(buttons...)
 
+	b.pushState(userID, Screen{
+		Text:     Msg.AlertSetupInstruction,
+		Keyboard: keyword,
+	})
 	user := &telebot.User{ID: userID}
 	_, err = b.bot.Send(user, Msg.AlertSetupInstruction, keyword)
 
@@ -166,9 +170,6 @@ func (b *Bot) SendPostImportInstructions(userID int64) error {
 	keyword := &telebot.ReplyMarkup{}
 
 	keyword.Inline(
-		telebot.Row{
-			manualSettingsButton,
-		},
 		telebot.Row{
 			successButton,
 		},
