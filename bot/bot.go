@@ -18,7 +18,6 @@ type ISubscriptionsService interface {
 }
 
 type IServersService interface {
-	RegisterNewPeer(ctx context.Context, userID int64, serverID string) (servers.RegisterNewPeerOutput, error)
 	GetAllActiveServers(ctx context.Context) ([]servers.Server, error)
 }
 

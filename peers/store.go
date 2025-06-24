@@ -20,15 +20,9 @@ func NewStore(db *mongo.Database) *store {
 	}
 }
 
-func (s *store) Create(ctx context.Context, peer Peer) (string, error) {
-	res, err := s.db.InsertOne(ctx, peer)
-	if err != nil {
-		return "", err
-	}
-
-	id := res.InsertedID.(primitive.ObjectID).Hex()
-
-	return id, nil
+func (s *store) Create(ctx context.Context, peer Peer) error {
+	_, err := s.db.InsertOne(ctx, peer)
+	return err
 }
 
 func (s *store) GetByID(ctx context.Context, ID string) (Peer, error) {

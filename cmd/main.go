@@ -42,7 +42,6 @@ func main() {
 				PublicURL: fmt.Sprintf("%s/webhook", cfg.ApiUrl),
 			},
 		},
-
 		ParseMode: telebot.ModeHTML,
 	}
 
@@ -63,7 +62,7 @@ func main() {
 	notifier := notifier.NewNotifier(b)
 	usersService := users.NewService(users.NewStore(mongodb))
 	peersService := peers.NewService(peers.NewStore(mongodb))
-	serversService := servers.NewService(servers.NewStore(mongodb), peersService, cfg.ApiUrl)
+	serversService := servers.NewService(servers.NewStore(mongodb), peersService, cfg.ServerPanelPassword, cfg.ApiUrl)
 	subscriptionsService := subscriptions.NewService(subscriptions.NewStore(mongodb))
 	scheduler := scheduler.NewScheduler(subscriptionsService, peersService, serversService, notifier, logger)
 
@@ -101,7 +100,7 @@ func runScheduler(ctx context.Context, scheduler *scheduler.Scheduler) {
 	for {
 		select {
 		case <-ticker.C:
-			scheduler.CheckExpiredSubscriptions(ctx)
+			// scheduler.CheckExpiredSubscriptions(ctx)
 		case <-ctx.Done():
 			ticker.Stop()
 			return

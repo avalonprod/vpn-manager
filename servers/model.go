@@ -1,13 +1,14 @@
 package servers
 
-import "time"
-
 type Server struct {
-	ID           string    `bson:"_id"`
-	Location     string    `bson:"location"`
-	ServerApiUrl string    `bson:"server_api_url"`
-	AuthToken    string    `bson:"auth_token"`
-	MaxPeers     int       `bson:"max_peers,omitempty"`
-	IsActive     bool      `bson:"is_active"`
-	CreatedAt    time.Time `bson:"created_at"`
+	ID         string `bson:"_id"`
+	Location   string `bson:"location"`
+	Username   string `bson:"username"`
+	Host       string `bson:"host"`
+	Port       int    `bson:"port"`
+	Ip         string `bson:"ip"`
+	ApiUrl     string `bson:"api_url"`
+	InBoundID  int    `bson:"inbound_id"`
+	MaxClients int    `bson:"max_clients,omitempty"`
+	IsActive   bool   `bson:"is_active"`
 }

@@ -130,38 +130,22 @@ func (b *Bot) handleSuccess(c telebot.Context) error {
 	return c.Edit(Msg.AlertSuccess, keyword)
 }
 
-func (b *Bot) SendLocationsList(userID int64) error {
-	servers, err := b.serversService.GetAllActiveServers(context.Background())
-	if err != nil {
-		b.logger.Error(err)
-		return err
-	}
-
+func (b *Bot) SendSetupInstruction(userID int64) error {
 	keyword := &telebot.ReplyMarkup{}
 
-	buttons := []telebot.Row{}
-
-	for _, server := range servers {
-		buttons = append(buttons, telebot.Row{
-			{
-				Text: server.Location,
-				URL:  fmt.Sprintf("%s/setup?user_id=%d&server_id=%s", b.apiUrl, userID, server.ID),
-			},
-		})
-	}
-
-	buttons = append(buttons, telebot.Row{
-		backButton,
-		supportButton,
-	})
-	keyword.Inline(buttons...)
+	keyword.Inline(
+		telebot.Row{
+			{Text: "Автонастройка", URL: fmt.Sprintf("%s/setup?user_id=%d&os=ios", b.apiUrl, userID)},
+		},
+	)
 
 	b.pushState(userID, Screen{
 		Text:     Msg.AlertSetupInstruction,
 		Keyboard: keyword,
 	})
+
 	user := &telebot.User{ID: userID}
-	_, err = b.bot.Send(user, Msg.AlertSetupInstruction, keyword)
+	_, err := b.bot.Send(user, Msg.AlertSetupInstruction, keyword)
 
 	return err
 }

@@ -6,7 +6,7 @@ import (
 )
 
 type IStore interface {
-	Create(ctx context.Context, peer Peer) (string, error)
+	Create(ctx context.Context, peer Peer) error
 	GetByID(ctx context.Context, ID string) (Peer, error)
 	DeletePeersByUserID(ctx context.Context, userID int64) error
 	GetPeersByUserID(ctx context.Context, userID int64) ([]Peer, error)
@@ -23,22 +23,20 @@ func NewService(store IStore) *service {
 }
 
 type CreatePeerInput struct {
-	UserId    int64
-	ServerId  string
-	Location  string
-	PublicKey string
-	Config    string
+	UserId        int64
+	ServerId      string
+	Location      string
+	ConnectionURI string
 }
 
-func (s *service) CreatePeer(ctx context.Context, input CreatePeerInput) (string, error) {
+func (s *service) CreatePeer(ctx context.Context, input CreatePeerInput) error {
 	return s.store.Create(ctx, Peer{
-		UserID:    input.UserId,
-		ServerID:  input.ServerId,
-		Config:    input.Config,
-		Location:  input.Location,
-		PublicKey: input.PublicKey,
-		IsActive:  true,
-		CreatedAt: time.Now().UTC(),
+		UserID:        input.UserId,
+		ServerID:      input.ServerId,
+		Location:      input.Location,
+		ConnectionURI: input.ConnectionURI,
+		IsActive:      true,
+		CreatedAt:     time.Now().UTC(),
 	})
 }
 

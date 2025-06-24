@@ -9,6 +9,7 @@ type (
 		TelegramAccessToken  string
 		TelegramWebhookToken string
 		TelegramWebhookPort  string
+		ServerPanelPassword  string
 		ApiUrl               string
 		Port                 string
 		MongoDB              MongoDB
@@ -38,6 +39,8 @@ func MustLoad() *Config {
 	cfg.MongoDB.Username = os.Getenv("MONGODB_USERNAME")
 	cfg.MongoDB.Password = os.Getenv("MONGODB_PASSWORD")
 	cfg.MongoDB.Name = os.Getenv("MONGODB_NAME")
+
+	cfg.ServerPanelPassword = os.Getenv("SERVER_PANEL_PASSWORD")
 
 	return &cfg
 }
