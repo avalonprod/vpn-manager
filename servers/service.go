@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"vpn-manager/peers"
 
 	"github.com/google/uuid"
@@ -105,7 +106,7 @@ func (s *service) RegisterNewPeers(ctx context.Context, userID int64) ([]string,
 			continue
 		}
 
-		uri := fmt.Sprintf("vless://%s@%s:%d?encryption=none#%s", uuid, server.Ip, server.Port, server.Location)
+		uri := fmt.Sprintf("vless://%s@%s:%d?security=reality&encryption=none&sni=%s&pbk=%s&sid=%s#%s", uuid, server.Ip, server.Port, url.QueryEscape(server.Security.SNI), server.Security.PublicKey, server.Security.ShortID, server.Location)
 
 		if err := s.peersService.CreatePeer(ctx, peers.CreatePeerInput{
 			UserId:        userID,
