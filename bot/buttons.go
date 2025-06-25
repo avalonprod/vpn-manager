@@ -3,13 +3,15 @@ package bot
 import "gopkg.in/telebot.v4"
 
 var (
-	selector = &telebot.ReplyMarkup{}
-
+	selector                = &telebot.ReplyMarkup{}
 	trialAccessButton       = selector.Data("Попробовать бесплатно", "trial_access")
 	appsListButton          = selector.Data("Скачать приложение", "apps_list")
 	subscribeButton         = selector.Data("Купить от 190р в месяц", "subscribe")
 	renewSubscriptionButton = selector.Data("Продлить подписку", "renew_subscribe")
-	supportButton           = selector.URL("Поддержка", "https://t.me/neonguard_support")
+	supportButton           = selector.Data("Поддержка", "support")
 	successButton           = selector.Data("Все заработало спасибо", "success")
-	backButton              = selector.Data("Назад", "back")
 )
+
+func (b *Bot) backButtonTo(screen string) telebot.Btn {
+	return selector.Data("Назад", "back", screen)
+}

@@ -49,16 +49,33 @@ func NewBot(
 }
 
 func (b *Bot) Run() {
-	b.bot.Handle("/start", b.handleStart)
-	b.bot.Handle(&trialAccessButton, b.handleTrialAccess)
-	b.bot.Handle(&appsListButton, b.handleAppsList)
-	b.bot.Handle(&subscribeButton, b.handleSubscribe)
-	b.bot.Handle(&renewSubscriptionButton, b.handleSubscribe)
-	b.bot.Handle(&successButton, b.handleSuccess)
 
-	b.bot.Handle(&backButton, b.handleBack)
+	handler := b.bot.Group()
+
+	handler.Use(b.pushScreen)
+	handler.Handle("/start", b.handleStart)
+	handler.Handle(&trialAccessButton, b.handleTrialAccess)
+	handler.Handle(&appsListButton, b.handleAppsList)
+	handler.Handle(&subscribeButton, b.handleSubscribe)
+	handler.Handle(&renewSubscriptionButton, b.handleRenewSubscribe)
+	handler.Handle(&successButton, b.handleSuccess)
+	handler.Handle(&supportButton, b.handleSupport)
+
+	handler.Handle(&telebot.Btn{Unique: "back"}, b.handleBack)
 
 	b.bot.Start()
+}
+
+func (b *Bot) pushScreen(next telebot.HandlerFunc) telebot.HandlerFunc {
+	return func(c telebot.Context) error {
+		if msg := c.Message(); msg != nil {
+			b.pushMessage(c.Sender().ID, msg)
+		}
+		if cb := c.Callback(); cb != nil {
+			b.pushMessage(c.Sender().ID, cb.Message)
+		}
+		return next(c)
+	}
 }
 
 func (b *Bot) replyError(c telebot.Context, msg string) error {
