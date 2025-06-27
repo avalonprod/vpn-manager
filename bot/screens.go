@@ -119,8 +119,11 @@ func (b *Bot) GenerateAppsListScreen(userID int64) *Screen {
 
 	keyword.Inline(
 		telebot.Row{
-			{Text: "📱 iPhone / iPad", URL: fmt.Sprintf("%s/apps?user_id=%d&os=ios", b.apiUrl, userID)},
 			{Text: "💻 MacOs", URL: fmt.Sprintf("%s/apps?user_id=%d&os=macos", b.apiUrl, userID)},
+		},
+		telebot.Row{
+			{Text: "📱 iPhone / iPad", URL: fmt.Sprintf("%s/apps?user_id=%d&os=ios", b.apiUrl, userID)},
+			{Text: "📱 Android", URL: fmt.Sprintf("%s/apps?user_id=%d&os=android", b.apiUrl, userID)},
 		},
 		telebot.Row{
 			b.backButtonTo("trial_access"),
@@ -230,12 +233,12 @@ func (b *Bot) GenerateSuccessScreen(userID int64) *Screen {
 	}
 }
 
-func (b *Bot) GenerateSetupScreen(userID int64) *Screen {
+func (b *Bot) GenerateSetupScreen(userID int64, os string) *Screen {
 	keyword := &telebot.ReplyMarkup{}
 
 	keyword.Inline(
 		telebot.Row{
-			{Text: "Автонастройка", URL: fmt.Sprintf("%s/setup?user_id=%d&os=ios", b.apiUrl, userID)},
+			{Text: "Автонастройка", URL: fmt.Sprintf("%s/setup?user_id=%d&os=%s", b.apiUrl, userID, os)},
 		},
 		telebot.Row{
 			b.backButtonTo("apps_list"),

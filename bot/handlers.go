@@ -18,12 +18,15 @@ func (b *Bot) handleStart(c telebot.Context) error {
 		return b.replyError(c, ErrDefault)
 	}
 
-	if err := b.clearMessages(user.ID); err != nil {
-		return err
+	screen := b.GenerateStartScreen(user.ID)
+	msg, err := b.bot.Send(user, screen.Text, screen.Keyboard)
+	if err != nil {
+		return nil
 	}
 
-	screen := b.GenerateStartScreen(user.ID)
-	return c.Send(screen.Text, screen.Keyboard)
+	defer b.pushMessage(user.ID, msg)
+
+	return b.clearMessages(user.ID)
 }
 
 func (b *Bot) handleSupport(c telebot.Context) error {
@@ -73,14 +76,14 @@ func (b *Bot) handleSuccess(c telebot.Context) error {
 	return c.Edit(screen.Text, screen.Keyboard)
 }
 
-func (b *Bot) SendSetupInstruction(userID int64) error {
+func (b *Bot) SendSetupInstruction(userID int64, os string) error {
 	user := &telebot.User{ID: userID}
 
 	if err := b.clearMessages(user.ID); err != nil {
 		return err
 	}
 
-	screen := b.GenerateSetupScreen(userID)
+	screen := b.GenerateSetupScreen(userID, os)
 	msg, err := b.bot.Send(user, screen.Text, screen.Keyboard)
 	b.pushMessage(userID, msg)
 	return err

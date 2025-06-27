@@ -22,7 +22,7 @@ type IServersService interface {
 }
 
 type IBot interface {
-	SendSetupInstruction(userID int64) error
+	SendSetupInstruction(userID int64, os string) error
 	SendPostImportInstructions(userID int64) error
 }
 
@@ -63,13 +63,23 @@ func (h *Handler) downloadApp(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.bot.SendSetupInstruction(userID); err != nil {
+	if err := h.bot.SendSetupInstruction(userID, query.Get("os")); err != nil {
 		log.Print(err)
 		http.Error(w, "Failed to send setup instructions", http.StatusInternalServerError)
 		return
 	}
 
-	http.Redirect(w, r, h.apps.AppStoreURL, http.StatusTemporaryRedirect)
+	var appUrl string
+	switch query.Get("os") {
+	case "ios":
+		appUrl = h.apps.AppStoreURL
+	case "macos":
+		appUrl = h.apps.AppStoreURL
+	case "android":
+		appUrl = h.apps.PlayMarketURL
+	}
+
+	http.Redirect(w, r, appUrl, http.StatusTemporaryRedirect)
 }
 
 func (h *Handler) setup(w http.ResponseWriter, r *http.Request) {
@@ -86,7 +96,16 @@ func (h *Handler) setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	deep := fmt.Sprintf("streisand://import/%s/subs?user_id=%d&name=%s", h.apiUrl, userID, "NeonGuard")
+	var deep string
+
+	switch query.Get("os") {
+	case "ios":
+		deep = fmt.Sprintf("streisand://import/%s/subs?user_id=%d&name=%s", h.apiUrl, userID, "NeonGuard")
+	case "macos":
+		deep = fmt.Sprintf("streisand://import/%s/subs?user_id=%d&name=%s", h.apiUrl, userID, "NeonGuard")
+	case "android":
+		deep = fmt.Sprintf("v2raytun://import/%s/subs?user_id=%d&name=%s", h.apiUrl, userID, "NeonGuard")
+	}
 
 	http.Redirect(w, r, deep, http.StatusTemporaryRedirect)
 }
