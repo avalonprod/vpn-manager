@@ -2,6 +2,7 @@ package subscriptions
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -9,7 +10,7 @@ type IStore interface {
 	Create(ctx context.Context, subscription Subscription) error
 	DeactivateExpiredSubscriptions(ctx context.Context) error
 	GetExpiredSubscriptions(ctx context.Context) ([]Subscription, error)
-	HasTrialSubscription(ctx context.Context, userID int64) (bool, error)
+	GetByUserID(ctx context.Context, userID int64) (*Subscription, error)
 }
 
 type service struct {
@@ -23,10 +24,19 @@ func NewService(store IStore) *service {
 }
 
 func (s *service) CreateTrialSubscription(ctx context.Context, userID int64) error {
+	sub, err := s.store.GetByUserID(ctx, userID)
+	if err != nil && !errors.Is(err, ErrSubscriptionNotFound) {
+		return err
+	}
+
+	if sub != nil {
+		return nil
+	}
+
 	startsAt := time.Now().UTC()
-	err := s.store.Create(ctx, Subscription{
+	err = s.store.Create(ctx, Subscription{
 		UserID:    userID,
-		Plan:      PlanTrial,
+		IsTrial:   true,
 		Active:    true,
 		StartsAt:  startsAt,
 		ExpiresAt: startsAt.Add(3 * 24 * time.Hour),

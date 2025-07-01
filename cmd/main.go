@@ -66,9 +66,9 @@ func main() {
 	subscriptionsService := subscriptions.NewService(subscriptions.NewStore(mongodb))
 	scheduler := scheduler.NewScheduler(subscriptionsService, peersService, serversService, notifier, logger)
 
-	bot := bot.NewBot(b, logger, usersService, serversService, subscriptionsService, cfg.ApiUrl)
+	bot := bot.NewBot(b, logger, usersService, serversService, peersService, subscriptionsService, cfg.ApiUrl)
 
-	handler := api.NewHandler(peersService, serversService, bot, cfg.ApiUrl, cfg.Apps)
+	handler := api.NewHandler(peersService, bot, cfg.ApiUrl, cfg.Apps)
 
 	srv := server.NewServer(&server.HttpConfig{
 		Port: cfg.Port,

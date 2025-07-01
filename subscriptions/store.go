@@ -2,7 +2,7 @@ package subscriptions
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -24,6 +24,24 @@ func NewStore(db *mongo.Database) *store {
 func (s *store) Create(ctx context.Context, subscription Subscription) error {
 	_, err := s.db.InsertOne(ctx, subscription)
 	return err
+}
+
+func (s *store) GetByUserID(ctx context.Context, userID int64) (*Subscription, error) {
+	filter := bson.M{
+		"user_id": userID,
+	}
+
+	var subscription Subscription
+
+	err := s.db.FindOne(ctx, filter).Decode(&subscription)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, ErrSubscriptionNotFound
+		}
+		return nil, err
+	}
+
+	return &subscription, nil
 }
 
 func (s *store) GetExpiredSubscriptions(ctx context.Context) ([]Subscription, error) {
@@ -58,18 +76,4 @@ func (s *store) DeactivateExpiredSubscriptions(ctx context.Context) error {
 	_, err := s.db.UpdateMany(ctx, filter, update)
 
 	return err
-}
-
-func (s *store) HasTrialSubscription(ctx context.Context, userID int64) (bool, error) {
-	filter := bson.M{
-		"user_id": userID,
-		"plan":    PlanTrial,
-	}
-
-	count, err := s.db.CountDocuments(ctx, filter)
-	if err != nil {
-		return false, fmt.Errorf("failed to count subscriptions: %w", err)
-	}
-
-	return count > 0, nil
 }

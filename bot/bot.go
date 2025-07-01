@@ -3,7 +3,6 @@ package bot
 import (
 	"context"
 	"vpn-manager/pkg/logger"
-	"vpn-manager/servers"
 	"vpn-manager/users"
 
 	"gopkg.in/telebot.v4"
@@ -18,7 +17,11 @@ type ISubscriptionsService interface {
 }
 
 type IServersService interface {
-	GetAllActiveServers(ctx context.Context) ([]servers.Server, error)
+	RegisterNewPeers(ctx context.Context, userID int64) error
+}
+
+type IPeersService interface {
+	ActivatePeer(ctx context.Context, userID int64) error
 }
 
 type Bot struct {
@@ -26,6 +29,7 @@ type Bot struct {
 	logger               logger.ILogger
 	usersService         IUsersService
 	serversService       IServersService
+	peersService         IPeersService
 	subscriptionsService ISubscriptionsService
 	apiUrl               string
 }
@@ -35,6 +39,7 @@ func NewBot(
 	logger logger.ILogger,
 	usersService IUsersService,
 	serversService IServersService,
+	peersService IPeersService,
 	subscriptionsService ISubscriptionsService,
 	apiUrl string,
 ) *Bot {
@@ -43,6 +48,7 @@ func NewBot(
 		logger:               logger,
 		usersService:         usersService,
 		serversService:       serversService,
+		peersService:         peersService,
 		subscriptionsService: subscriptionsService,
 		apiUrl:               apiUrl,
 	}
@@ -52,30 +58,27 @@ func (b *Bot) Run() {
 
 	handler := b.bot.Group()
 
-	handler.Use(b.pushScreen)
+	handler.Use(func(next telebot.HandlerFunc) telebot.HandlerFunc {
+		return func(c telebot.Context) error {
+			b.pushMessage(c.Sender().ID, c.Message())
+			return next(c)
+		}
+	})
+	handler.Handle(telebot.OnText, func(c telebot.Context) error {
+		c.Delete()
+		return nil
+	})
+
 	handler.Handle("/start", b.handleStart)
-	handler.Handle(&trialAccessButton, b.handleTrialAccess)
-	handler.Handle(&appsListButton, b.handleAppsList)
-	handler.Handle(&subscribeButton, b.handleSubscribe)
-	handler.Handle(&renewSubscriptionButton, b.handleRenewSubscribe)
-	handler.Handle(&successButton, b.handleSuccess)
-	handler.Handle(&supportButton, b.handleSupport)
+	handler.Handle(&telebot.Btn{Unique: TrialAccessScreen}, b.handleTrialAccess)
+	handler.Handle(&telebot.Btn{Unique: AppListScreen}, b.handleAppsList)
+	handler.Handle(&telebot.Btn{Unique: SubscriptionsScreen}, b.handleSubscribe)
+	handler.Handle(&telebot.Btn{Unique: SuccessScreen}, b.handleSuccess)
+	handler.Handle(&telebot.Btn{Unique: ManualSetupScreen}, b.handleManualSetup)
 
 	handler.Handle(&telebot.Btn{Unique: "back"}, b.handleBack)
 
 	b.bot.Start()
-}
-
-func (b *Bot) pushScreen(next telebot.HandlerFunc) telebot.HandlerFunc {
-	return func(c telebot.Context) error {
-		if msg := c.Message(); msg != nil {
-			b.pushMessage(c.Sender().ID, msg)
-		}
-		if cb := c.Callback(); cb != nil {
-			b.pushMessage(c.Sender().ID, cb.Message)
-		}
-		return next(c)
-	}
 }
 
 func (b *Bot) replyError(c telebot.Context, msg string) error {

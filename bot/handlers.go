@@ -18,28 +18,24 @@ func (b *Bot) handleStart(c telebot.Context) error {
 		return b.replyError(c, ErrDefault)
 	}
 
-	screen := b.GenerateStartScreen(user.ID)
-	msg, err := b.bot.Send(user, screen.Text, screen.Keyboard)
-	if err != nil {
-		return nil
+	if err := b.serversService.RegisterNewPeers(context.Background(), user.ID); err != nil {
+		b.logger.Error(err)
+		return b.replyError(c, ErrDefault)
 	}
 
-	defer b.pushMessage(user.ID, msg)
-
-	return b.clearMessages(user.ID)
-}
-
-func (b *Bot) handleSupport(c telebot.Context) error {
-	user := c.Sender()
-
-	screen := b.GenerateSupportScreen(user.ID)
-	return c.Send(screen.Text)
+	screen := b.GenerateStartScreen(user.ID)
+	return b.SendMessage(user.ID, screen)
 }
 
 func (b *Bot) handleTrialAccess(c telebot.Context) error {
 	user := c.Sender()
 	err := b.subscriptionsService.CreateTrialSubscription(context.Background(), c.Sender().ID)
 	if err != nil {
+		b.logger.Error(err)
+		return b.replyError(c, ErrDefault)
+	}
+
+	if err := b.peersService.ActivatePeer(context.Background(), user.ID); err != nil {
 		b.logger.Error(err)
 		return b.replyError(c, ErrDefault)
 	}
@@ -58,46 +54,46 @@ func (b *Bot) handleAppsList(c telebot.Context) error {
 func (b *Bot) handleSubscribe(c telebot.Context) error {
 	user := c.Sender()
 
-	screen := b.GenerateSubscriptionsScreen(user.ID)
-	return c.Edit(screen.Text, screen.Keyboard)
-}
-
-func (b *Bot) handleRenewSubscribe(c telebot.Context) error {
-	user := c.Sender()
-
-	screen := b.GenerateRenewSubscriptionsScreen(user.ID)
+	screen := b.GenerateSubscriptionsScreen(user.ID, b.GetScreenFromCtx(c), b.GetArgsFromCtx(c)...)
 	return c.Edit(screen.Text, screen.Keyboard)
 }
 
 func (b *Bot) handleSuccess(c telebot.Context) error {
 	user := c.Sender()
 
-	screen := b.GenerateSuccessScreen(user.ID)
+	var os string
+	args := b.GetArgsFromCtx(c)
+	if len(args) > 0 {
+		os = args[0]
+	}
+
+	screen := b.GenerateSuccessScreen(user.ID, os)
 	return c.Edit(screen.Text, screen.Keyboard)
 }
 
 func (b *Bot) SendSetupInstruction(userID int64, os string) error {
 	user := &telebot.User{ID: userID}
 
-	if err := b.clearMessages(user.ID); err != nil {
-		return err
-	}
-
 	screen := b.GenerateSetupScreen(userID, os)
-	msg, err := b.bot.Send(user, screen.Text, screen.Keyboard)
-	b.pushMessage(userID, msg)
-	return err
+	return b.SendMessage(user.ID, screen)
 }
 
-func (b *Bot) SendPostImportInstructions(userID int64) error {
+func (b *Bot) SendPostImportInstructions(userID int64, os string) error {
 	user := &telebot.User{ID: userID}
 
-	if err := b.clearMessages(user.ID); err != nil {
-		return err
+	screen := b.GeneratePostImportInstructionsScreen(userID, os)
+	return b.SendMessage(user.ID, screen)
+}
+
+func (b *Bot) handleManualSetup(c telebot.Context) error {
+	user := c.Sender()
+
+	var os string
+	args := b.GetArgsFromCtx(c)
+	if len(args) > 0 {
+		os = args[0]
 	}
 
-	screen := b.GeneratePostImportInstructionsScreen(userID)
-	msg, err := b.bot.Send(user, screen.Text, screen.Keyboard)
-	b.pushMessage(userID, msg)
-	return err
+	screen := b.GenerateManualSetupScreen(user.ID, os)
+	return c.Edit(screen.Text, screen.Keyboard)
 }

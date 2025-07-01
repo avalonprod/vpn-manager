@@ -14,33 +14,27 @@ import (
 )
 
 type IPeersService interface {
-	GetPeersByUserID(ctx context.Context, userID int64) ([]peers.Peer, error)
-}
-
-type IServersService interface {
-	RegisterNewPeers(ctx context.Context, userID int64) ([]string, error)
+	GetActivePeerByUserID(ctx context.Context, userID int64) (peers.Peer, error)
 }
 
 type IBot interface {
 	SendSetupInstruction(userID int64, os string) error
-	SendPostImportInstructions(userID int64) error
+	SendPostImportInstructions(userID int64, os string) error
 }
 
 type Handler struct {
-	peersService   IPeersService
-	serversService IServersService
-	bot            IBot
-	apiUrl         string
-	apps           config.Apps
+	peersService IPeersService
+	bot          IBot
+	apiUrl       string
+	apps         config.Apps
 }
 
-func NewHandler(peersService IPeersService, serversService IServersService, bot IBot, apiUrl string, apps config.Apps) *Handler {
+func NewHandler(peersService IPeersService, bot IBot, apiUrl string, apps config.Apps) *Handler {
 	return &Handler{
-		peersService:   peersService,
-		serversService: serversService,
-		bot:            bot,
-		apiUrl:         apiUrl,
-		apps:           apps,
+		peersService: peersService,
+		bot:          bot,
+		apiUrl:       apiUrl,
+		apps:         apps,
 	}
 }
 
@@ -91,7 +85,7 @@ func (h *Handler) setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.bot.SendPostImportInstructions(userID); err != nil {
+	if err := h.bot.SendPostImportInstructions(userID, query.Get("os")); err != nil {
 		http.Error(w, "failed to send post import instructions", http.StatusInternalServerError)
 		return
 	}
@@ -119,11 +113,17 @@ func (h *Handler) getSubs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	peers, err := h.serversService.RegisterNewPeers(r.Context(), userID)
+	peer, err := h.peersService.GetActivePeerByUserID(r.Context(), userID)
 	if err != nil {
-		http.Error(w, "failed to register new peer", http.StatusInternalServerError)
+		http.Error(w, "failed to get subs", http.StatusInternalServerError)
 		return
 	}
 
-	fmt.Fprint(w, strings.Join(peers, "\n"))
+	subs := make([]string, 0, len(peer.Subs))
+
+	for _, sub := range peer.Subs {
+		subs = append(subs, sub.URL)
+	}
+
+	fmt.Fprint(w, strings.Join(subs, "\n"))
 }

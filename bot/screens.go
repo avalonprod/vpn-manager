@@ -7,6 +7,17 @@ import (
 	"gopkg.in/telebot.v4"
 )
 
+const (
+	StartScreen                 = "start_screen"
+	TrialAccessScreen           = "trial_access_screen"
+	SubscriptionsScreen         = "subscriptions_screen"
+	AppListScreen               = "app_list_screen"
+	SuccessScreen               = "success_screen"
+	PostImportInstructionScreen = "post_import_instruction_screen"
+	SetupInstructionScreen      = "setup_instruction_screen"
+	ManualSetupScreen           = "manual_setup_screen"
+)
+
 var store = map[int64][]telebot.StoredMessage{}
 
 func (b *Bot) clearMessages(userID int64) error {
@@ -42,15 +53,29 @@ type Screen struct {
 	Keyboard *telebot.ReplyMarkup
 }
 
+func (b *Bot) SendMessage(userID int64, screen *Screen) error {
+	msg, err := b.bot.Send(&telebot.User{ID: userID}, screen.Text, screen.Keyboard)
+	if err != nil {
+		return err
+	}
+
+	if err := b.clearMessages(userID); err != nil {
+		return err
+	}
+
+	b.pushMessage(userID, msg)
+	return nil
+}
+
 func (b *Bot) GenerateStartScreen(userID int64) *Screen {
 	keyword := &telebot.ReplyMarkup{}
 
 	keyword.Inline(
 		telebot.Row{
-			trialAccessButton,
+			b.navigateButtonTo("Попробовать бесплатно", TrialAccessScreen, StartScreen),
 		},
 		telebot.Row{
-			subscribeButton,
+			b.navigateButtonTo("Купить от 190р в месяц", SubscriptionsScreen, StartScreen),
 		},
 	)
 
@@ -76,11 +101,11 @@ func (b *Bot) GenerateTrialAccessScreen(userID int64) *Screen {
 	keyword := &telebot.ReplyMarkup{}
 	keyword.Inline(
 		telebot.Row{
-			appsListButton,
+			b.navigateButtonTo("Скачать приложение", AppListScreen, TrialAccessScreen),
 		},
 		telebot.Row{
-			b.backButtonTo("start"),
-			renewSubscriptionButton,
+			b.backButtonTo(StartScreen),
+			b.navigateButtonTo("Продлить подписку", SubscriptionsScreen, TrialAccessScreen),
 		},
 	)
 
@@ -100,20 +125,6 @@ func (b *Bot) GenerateTrialAccessScreen(userID int64) *Screen {
 	}
 }
 
-func (b *Bot) GenerateSupportScreen(userID int64) *Screen {
-	text := `
-Если что-то не работает, не получается подключиться или возникли вопросы — мы на связи.
-
-📩 Напиши нам прямо сюда:
-@neonguard_support
-	`
-
-	return &Screen{
-		Text:     text,
-		Keyboard: nil,
-	}
-}
-
 func (b *Bot) GenerateAppsListScreen(userID int64) *Screen {
 	keyword := &telebot.ReplyMarkup{}
 
@@ -126,7 +137,7 @@ func (b *Bot) GenerateAppsListScreen(userID int64) *Screen {
 			{Text: "📱 Android", URL: fmt.Sprintf("%s/apps?user_id=%d&os=android", b.apiUrl, userID)},
 		},
 		telebot.Row{
-			b.backButtonTo("trial_access"),
+			b.backButtonTo(TrialAccessScreen),
 			supportButton,
 		},
 	)
@@ -143,24 +154,24 @@ func (b *Bot) GenerateAppsListScreen(userID int64) *Screen {
 	}
 }
 
-func (b *Bot) GenerateSubscriptionsScreen(userID int64) *Screen {
+func (b *Bot) GenerateSubscriptionsScreen(userID int64, context string, args ...string) *Screen {
 	keyword := &telebot.ReplyMarkup{}
 
 	keyword.Inline(
 		telebot.Row{
-			{Text: "💳 1 месяц - 500 ₽"},
+			{Text: "💳 1 месяц - 500 ₽", URL: "https://c.cloudpayments.ru/payments/1981efead06a4baab02a1bc2f23ca920"},
 		},
 		telebot.Row{
-			{Text: "💳 6 мес. + 2 мес. 🎁 - 350 ₽ / мес"},
+			{Text: "💳 6 мес. + 2 мес. 🎁 - 350 ₽ / мес", URL: "https://c.cloudpayments.ru/payments/a0eb9ffcef944777a668c071530486ff"},
 		},
 		telebot.Row{
-			{Text: "💳 1 год + 3 мес. 🎁 - 280 ₽ / мес"},
+			{Text: "💳 1 год + 3 мес. 🎁 - 280 ₽ / мес", URL: "https://c.cloudpayments.ru/payments/5d6126e5ca4c4b7689bdc8693d78c9be"},
 		},
 		telebot.Row{
-			{Text: "💳 2 года + 6 мес. 🎁 - 190 ₽ / мес"},
+			{Text: "💳 2 года + 6 мес. 🎁 - 190 ₽ / мес", URL: "https://c.cloudpayments.ru/payments/1588814b133d465f859639af353101db"},
 		},
 		telebot.Row{
-			b.backButtonTo("start"),
+			b.backButtonTo(context, args...),
 			supportButton,
 		},
 	)
@@ -177,47 +188,16 @@ func (b *Bot) GenerateSubscriptionsScreen(userID int64) *Screen {
 	}
 }
 
-func (b *Bot) GenerateRenewSubscriptionsScreen(userID int64) *Screen {
+func (b *Bot) GenerateSuccessScreen(userID int64, os string) *Screen {
 	keyword := &telebot.ReplyMarkup{}
 
 	keyword.Inline(
 		telebot.Row{
-			{Text: "💳 1 месяц - 500 ₽"},
-		},
-		telebot.Row{
-			{Text: "💳 6 мес. + 2 мес. 🎁 - 350 ₽ / мес"},
-		},
-		telebot.Row{
-			{Text: "💳 1 год + 3 мес. 🎁 - 280 ₽ / мес"},
-		},
-		telebot.Row{
-			{Text: "💳 2 года + 6 мес. 🎁 - 190 ₽ / мес"},
-		},
-		telebot.Row{
-			b.backButtonTo("trial_access"),
+			b.navigateButtonTo("Продлить доступ", SubscriptionsScreen, SuccessScreen, os),
 			supportButton,
 		},
-	)
-
-	text := `
-<b>Выберите срок подписки.</b>
-
-Чем больше срок подписки, тем ниже стоимость одного месяца.
-	`
-
-	return &Screen{
-		Text:     text,
-		Keyboard: keyword,
-	}
-}
-
-func (b *Bot) GenerateSuccessScreen(userID int64) *Screen {
-	keyword := &telebot.ReplyMarkup{}
-
-	keyword.Inline(
 		telebot.Row{
-			renewSubscriptionButton,
-			supportButton,
+			b.backButtonTo(PostImportInstructionScreen, os),
 		},
 	)
 
@@ -241,7 +221,7 @@ func (b *Bot) GenerateSetupScreen(userID int64, os string) *Screen {
 			{Text: "Автонастройка", URL: fmt.Sprintf("%s/setup?user_id=%d&os=%s", b.apiUrl, userID, os)},
 		},
 		telebot.Row{
-			b.backButtonTo("apps_list"),
+			b.backButtonTo(AppListScreen),
 		},
 	)
 
@@ -255,15 +235,21 @@ func (b *Bot) GenerateSetupScreen(userID int64, os string) *Screen {
 	}
 }
 
-func (b *Bot) GeneratePostImportInstructionsScreen(userID int64) *Screen {
+func (b *Bot) GeneratePostImportInstructionsScreen(userID int64, os string) *Screen {
 	keyword := &telebot.ReplyMarkup{}
 
 	keyword.Inline(
 		telebot.Row{
-			successButton,
+			b.navigateButtonTo("Все заработало спасибо", SuccessScreen, PostImportInstructionScreen, os),
+		},
+		telebot.Row{
+			b.navigateButtonTo("Ручная настройка", ManualSetupScreen, PostImportInstructionScreen, os),
 		},
 		telebot.Row{
 			supportButton,
+		},
+		telebot.Row{
+			b.backButtonTo(SetupInstructionScreen, os),
 		},
 	)
 
@@ -279,22 +265,76 @@ func (b *Bot) GeneratePostImportInstructionsScreen(userID int64) *Screen {
 	}
 }
 
+func (b *Bot) GenerateManualSetupScreen(userID int64, os string) *Screen {
+	keyword := &telebot.ReplyMarkup{}
+
+	keyword.Inline(
+		telebot.Row{
+			b.backButtonTo(PostImportInstructionScreen, os),
+		},
+	)
+
+	url := fmt.Sprintf("%s/subs?user_id=%d&name=%s", b.apiUrl, userID, "NeonGuard")
+
+	text := fmt.Sprintf(`
+Ручная настройка очень простая и займет меньше минуты:
+
+1. Скопируй эту ссылку: %s
+
+2. Зайди в приложение Streisand на любом устройстве.
+
+3. Нажми на "+" как на первом скриншоте.
+
+4. И выбери Import from clipboard
+
+5. Если возникли сложности — пиши нам в поддержку, мы оперативно поможем.
+`, url)
+
+	return &Screen{
+		Text:     text,
+		Keyboard: keyword,
+	}
+}
+
 func (b *Bot) handleBack(c telebot.Context) error {
 	user := c.Sender()
 	_ = c.Respond()
 
-	screen := c.Data()
+	args := c.Args()
+	if len(args) == 0 {
+		return nil
+	}
+
+	screen := args[0]
+	data := args[1:]
 
 	switch screen {
-	case "start":
+	case StartScreen:
 		screen := b.GenerateStartScreen(user.ID)
 		return c.Edit(screen.Text, screen.Keyboard)
-	case "trial_access":
+	case TrialAccessScreen:
 		screen := b.GenerateTrialAccessScreen(user.ID)
 		return c.Edit(screen.Text, screen.Keyboard)
-	case "apps_list":
+	case AppListScreen:
 		screen := b.GenerateAppsListScreen(user.ID)
 		return c.Edit(screen.Text, screen.Keyboard)
+	case SuccessScreen:
+		if len(data) != 0 {
+			screen := b.GenerateSuccessScreen(user.ID, data[0])
+			return c.Edit(screen.Text, screen.Keyboard)
+		}
+	case SetupInstructionScreen:
+		if len(data) != 0 {
+			screen := b.GenerateSetupScreen(user.ID, data[0])
+			return c.Edit(screen.Text, screen.Keyboard)
+		}
+	case PostImportInstructionScreen:
+		if len(data) != 0 {
+			screen := b.GeneratePostImportInstructionsScreen(user.ID, data[0])
+			return c.Edit(screen.Text, screen.Keyboard)
+		}
+	default:
+		return nil
 	}
 
 	return nil

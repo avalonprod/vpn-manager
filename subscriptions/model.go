@@ -2,14 +2,10 @@ package subscriptions
 
 import "time"
 
-const (
-	PlanTrial = "TRIAL"
-)
-
 type Subscription struct {
 	ID        string    `bson:"_id,omitempty"`
 	UserID    int64     `bson:"user_id"`
-	Plan      string    `bson:"plan"`
+	IsTrial   bool      `bson:"is_trial"`
 	Active    bool      `bson:"active"`
 	StartsAt  time.Time `bson:"starts_at"`
 	ExpiresAt time.Time `bson:"expires_at"`

@@ -9,8 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"vpn-manager/peers"
-
-	"github.com/google/uuid"
 )
 
 type IStore interface {
@@ -19,7 +17,8 @@ type IStore interface {
 }
 
 type IPeersService interface {
-	CreatePeer(ctx context.Context, peer peers.CreatePeerInput) error
+	Create(ctx context.Context, userID int64) (peers.Peer, error)
+	UpdateSubs(ctx context.Context, id string, subs []peers.Sub) error
 }
 
 type service struct {
@@ -43,15 +42,20 @@ type RegisterNewPeerOutput struct {
 	Uri      string
 }
 
-func (s *service) RegisterNewPeers(ctx context.Context, userID int64) ([]string, error) {
+func (s *service) RegisterNewPeers(ctx context.Context, userID int64) error {
 	client := http.Client{}
+
+	peer, err := s.peersService.Create(ctx, userID)
+	if err != nil {
+		return err
+	}
 
 	servers, err := s.store.GetAllActiveServers(ctx)
 	if err != nil {
-		return []string{}, err
+		return err
 	}
 
-	output := make([]string, 0, len(servers))
+	subs := make([]peers.Sub, 0, len(servers))
 
 	for _, server := range servers {
 		loginResp, err := client.PostForm(server.ApiUrl+"/login",
@@ -70,13 +74,10 @@ func (s *service) RegisterNewPeers(ctx context.Context, userID int64) ([]string,
 			continue
 		}
 
-		uuid := uuid.New().String()
-		email := uuid[:7]
-
 		setting, _ := json.Marshal(map[string]any{
 			"clients": []map[string]any{{
-				"id":         uuid,
-				"email":      email,
+				"id":         peer.UUID,
+				"email":      peer.Email,
 				"flow":       "",
 				"enable":     true,
 				"limitIp":    0,
@@ -99,29 +100,24 @@ func (s *service) RegisterNewPeers(ctx context.Context, userID int64) ([]string,
 			log.Printf("error registering new peer on server: %s err: %v", server.ID, err)
 			continue
 		}
-		defer resp.Body.Close()
+		resp.Body.Close()
 
 		if resp.StatusCode != 200 {
 			log.Printf("error registering new peer on server: %s bad status: %s", server.ID, resp.Status)
 			continue
 		}
 
-		uri := fmt.Sprintf("vless://%s@%s:%d?security=reality&encryption=none&sni=%s&pbk=%s&sid=%s#%s", uuid, server.Ip, server.Port, url.QueryEscape(server.Security.SNI), server.Security.PublicKey, server.Security.ShortID, server.Location)
+		sub := fmt.Sprintf("vless://%s@%s:%d?security=reality&encryption=none&sni=%s&pbk=%s&sid=%s#%s", peer.UUID, server.Ip, server.Port, url.QueryEscape(server.Security.SNI), server.Security.PublicKey, server.Security.ShortID, server.Location)
 
-		if err := s.peersService.CreatePeer(ctx, peers.CreatePeerInput{
-			UserId:        userID,
-			ServerId:      server.ID,
-			Location:      server.Location,
-			ConnectionURI: uri,
-		}); err != nil {
-			log.Printf("error creating peer for user %d on server %s: %v", userID, server.ID, err)
-			continue
-		}
-
-		output = append(output, uri)
+		subs = append(subs, peers.Sub{
+			Location: server.Location,
+			ServerID: server.ID,
+			URL:      sub,
+			Enabled:  true,
+		})
 	}
 
-	return output, nil
+	return s.peersService.UpdateSubs(ctx, peer.ID, subs)
 }
 
 func (s *service) GetAllActiveServers(ctx context.Context) ([]Server, error) {

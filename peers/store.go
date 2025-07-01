@@ -20,9 +20,9 @@ func NewStore(db *mongo.Database) *store {
 	}
 }
 
-func (s *store) Create(ctx context.Context, peer Peer) error {
-	_, err := s.db.InsertOne(ctx, peer)
-	return err
+func (s *store) Create(ctx context.Context, peer Peer) (string, error) {
+	res, err := s.db.InsertOne(ctx, peer)
+	return res.InsertedID.(primitive.ObjectID).Hex(), err
 }
 
 func (s *store) GetByID(ctx context.Context, ID string) (Peer, error) {
@@ -54,28 +54,55 @@ func (s *store) DeletePeersByUserID(ctx context.Context, userID int64) error {
 	return err
 }
 
-func (s *store) GetPeersByUserID(ctx context.Context, userID int64) ([]Peer, error) {
-	var peers []Peer
+func (s *store) GetPeerByUserID(ctx context.Context, userID int64) (Peer, error) {
+	var peer Peer
 
-	filter := bson.M{"user_id": userID}
+	filter := map[string]interface{}{"user_id": userID}
 
-	cursor, err := s.db.Find(ctx, filter)
+	err := s.db.FindOne(ctx, filter).Decode(&peer)
 	if err != nil {
-		return nil, err
-	}
-	defer cursor.Close(ctx)
-
-	for cursor.Next(ctx) {
-		var peer Peer
-		if err := cursor.Decode(&peer); err != nil {
-			return nil, err
+		if err == mongo.ErrNoDocuments {
+			return Peer{}, ErrPeerNotFound
 		}
-		peers = append(peers, peer)
+		return Peer{}, err
 	}
 
-	if err := cursor.Err(); err != nil {
-		return nil, err
+	return peer, nil
+}
+
+func (s *store) GetActivePeerByUserID(ctx context.Context, userID int64) (Peer, error) {
+	var peer Peer
+
+	filter := map[string]interface{}{"user_id": userID, "is_active": true}
+
+	err := s.db.FindOne(ctx, filter).Decode(&peer)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return Peer{}, ErrPeerNotFound
+		}
+		return Peer{}, err
 	}
 
-	return peers, nil
+	return peer, nil
+}
+
+func (s *store) UpdateSubs(ctx context.Context, id string, subs []Sub) error {
+	ObjectID, err := primitive.ObjectIDFromHex(id)
+	if err != nil {
+		return err
+	}
+
+	filter := bson.M{"_id": ObjectID}
+	update := bson.M{"$set": bson.M{"subs": subs}}
+
+	_, err = s.db.UpdateOne(ctx, filter, update)
+	return err
+}
+
+func (s *store) SetActive(ctx context.Context, userID int64) error {
+	filter := bson.M{"user_id": userID}
+	update := bson.M{"$set": bson.M{"is_active": true}}
+
+	_, err := s.db.UpdateOne(ctx, filter, update)
+	return err
 }

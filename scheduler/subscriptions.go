@@ -13,7 +13,7 @@ type ISubscriptionsService interface {
 }
 
 type IPeersService interface {
-	GetPeersByUserID(ctx context.Context, userID int64) ([]peers.Peer, error)
+	GetPeerByUserID(ctx context.Context, userID int64) (peers.Peer, error)
 	DeletePeersByUserID(ctx context.Context, userID int64) error
 }
 
