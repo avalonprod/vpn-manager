@@ -23,7 +23,7 @@ func (b *Bot) handleStart(c telebot.Context) error {
 		return b.replyError(c, ErrDefault)
 	}
 
-	screen := b.GenerateStartScreen(user.ID)
+	screen := b.BuildStartScreen(user.ID)
 	return b.SendMessage(user.ID, screen)
 }
 
@@ -40,21 +40,25 @@ func (b *Bot) handleTrialAccess(c telebot.Context) error {
 		return b.replyError(c, ErrDefault)
 	}
 
-	screen := b.GenerateTrialAccessScreen(user.ID)
+	screen := b.BuildTrialAccessScreen(user.ID)
 	return c.Edit(screen.Text, screen.Keyboard)
 }
 
 func (b *Bot) handleAppsList(c telebot.Context) error {
 	user := c.Sender()
 
-	screen := b.GenerateAppsListScreen(user.ID)
+	screen := b.BuildAppsListScreen(user.ID)
 	return c.Edit(screen.Text, screen.Keyboard)
 }
 
 func (b *Bot) handleSubscribe(c telebot.Context) error {
 	user := c.Sender()
 
-	screen := b.GenerateSubscriptionsScreen(user.ID, b.GetScreenFromCtx(c), b.GetArgsFromCtx(c)...)
+	screen, err := b.BuildSubscriptionsScreen(context.Background(), user.ID, b.GetScreenFromCtx(c), b.GetArgsFromCtx(c)...)
+	if err != nil {
+		b.logger.Error(err)
+		return b.replyError(c, ErrDefault)
+	}
 	return c.Edit(screen.Text, screen.Keyboard)
 }
 
@@ -67,21 +71,21 @@ func (b *Bot) handleSuccess(c telebot.Context) error {
 		os = args[0]
 	}
 
-	screen := b.GenerateSuccessScreen(user.ID, os)
+	screen := b.BuildSuccessScreen(user.ID, os)
 	return c.Edit(screen.Text, screen.Keyboard)
 }
 
 func (b *Bot) SendSetupInstruction(userID int64, os string) error {
 	user := &telebot.User{ID: userID}
 
-	screen := b.GenerateSetupScreen(userID, os)
+	screen := b.BuildSetupScreen(userID, os)
 	return b.SendMessage(user.ID, screen)
 }
 
 func (b *Bot) SendPostImportInstructions(userID int64, os string) error {
 	user := &telebot.User{ID: userID}
 
-	screen := b.GeneratePostImportInstructionsScreen(userID, os)
+	screen := b.BuildPostImportInstructionsScreen(userID, os)
 	return b.SendMessage(user.ID, screen)
 }
 
@@ -94,6 +98,6 @@ func (b *Bot) handleManualSetup(c telebot.Context) error {
 		os = args[0]
 	}
 
-	screen := b.GenerateManualSetupScreen(user.ID, os)
+	screen := b.BuildManualSetupScreen(user.ID, os)
 	return c.Edit(screen.Text, screen.Keyboard)
 }

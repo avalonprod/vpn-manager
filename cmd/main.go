@@ -12,10 +12,12 @@ import (
 	"vpn-manager/bot"
 	"vpn-manager/core/config"
 	"vpn-manager/notifier"
+	"vpn-manager/payments"
 	"vpn-manager/peers"
 	"vpn-manager/pkg/db/mongodb"
 	"vpn-manager/pkg/logger"
 	"vpn-manager/pkg/server"
+	"vpn-manager/plans"
 	"vpn-manager/scheduler"
 	"vpn-manager/servers"
 	"vpn-manager/subscriptions"
@@ -63,12 +65,20 @@ func main() {
 	usersService := users.NewService(users.NewStore(mongodb))
 	peersService := peers.NewService(peers.NewStore(mongodb))
 	serversService := servers.NewService(servers.NewStore(mongodb), peersService, cfg.ServerPanelPassword, cfg.ApiUrl)
-	subscriptionsService := subscriptions.NewService(subscriptions.NewStore(mongodb))
+	plansService := plans.NewService(plans.NewStore(mongodb))
+	paymentsService := payments.NewService(payments.NewStore(mongodb), plansService,
+		payments.CloudPaymentsConfig{
+			PublicID:  cfg.CloudPayments.PublicID,
+			SecretKey: cfg.CloudPayments.SecretKey,
+			ApiUrl:    cfg.CloudPayments.ApiUrl,
+		})
+	subscriptionsService := subscriptions.NewService(subscriptions.NewStore(mongodb), plansService, paymentsService)
+
 	scheduler := scheduler.NewScheduler(subscriptionsService, peersService, serversService, notifier, logger)
 
-	bot := bot.NewBot(b, logger, usersService, serversService, peersService, subscriptionsService, cfg.ApiUrl)
+	bot := bot.NewBot(b, logger, usersService, serversService, peersService, plansService, subscriptionsService, cfg.ApiUrl)
 
-	handler := api.NewHandler(peersService, bot, cfg.ApiUrl, cfg.Apps)
+	handler := api.NewHandler(peersService, plansService, paymentsService, subscriptionsService, bot, cfg.ApiUrl, cfg.Apps)
 
 	srv := server.NewServer(&server.HttpConfig{
 		Port: cfg.Port,

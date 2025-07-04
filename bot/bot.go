@@ -3,6 +3,8 @@ package bot
 import (
 	"context"
 	"vpn-manager/pkg/logger"
+	"vpn-manager/plans"
+	"vpn-manager/subscriptions"
 	"vpn-manager/users"
 
 	"gopkg.in/telebot.v4"
@@ -14,6 +16,7 @@ type IUsersService interface {
 
 type ISubscriptionsService interface {
 	CreateTrialSubscription(ctx context.Context, userID int64) error
+	GetByUserID(ctx context.Context, userID int64) (subscriptions.Subscription, error)
 }
 
 type IServersService interface {
@@ -24,12 +27,17 @@ type IPeersService interface {
 	ActivatePeer(ctx context.Context, userID int64) error
 }
 
+type IPlansService interface {
+	GetAll(ctx context.Context) ([]plans.Plan, error)
+}
+
 type Bot struct {
 	bot                  *telebot.Bot
 	logger               logger.ILogger
 	usersService         IUsersService
 	serversService       IServersService
 	peersService         IPeersService
+	plansService         IPlansService
 	subscriptionsService ISubscriptionsService
 	apiUrl               string
 }
@@ -40,6 +48,7 @@ func NewBot(
 	usersService IUsersService,
 	serversService IServersService,
 	peersService IPeersService,
+	plansService IPlansService,
 	subscriptionsService ISubscriptionsService,
 	apiUrl string,
 ) *Bot {
@@ -49,6 +58,7 @@ func NewBot(
 		usersService:         usersService,
 		serversService:       serversService,
 		peersService:         peersService,
+		plansService:         plansService,
 		subscriptionsService: subscriptionsService,
 		apiUrl:               apiUrl,
 	}

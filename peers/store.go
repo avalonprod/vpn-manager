@@ -2,6 +2,7 @@ package peers
 
 import (
 	"context"
+	"fmt"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -22,7 +23,12 @@ func NewStore(db *mongo.Database) *store {
 
 func (s *store) Create(ctx context.Context, peer Peer) (string, error) {
 	res, err := s.db.InsertOne(ctx, peer)
-	return res.InsertedID.(primitive.ObjectID).Hex(), err
+	oid, ok := res.InsertedID.(primitive.ObjectID)
+	if !ok {
+		return "", fmt.Errorf("inserted ID is not an ObjectID: %T", res.InsertedID)
+	}
+
+	return oid.Hex(), err
 }
 
 func (s *store) GetByID(ctx context.Context, ID string) (Peer, error) {

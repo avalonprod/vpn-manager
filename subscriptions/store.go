@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -74,6 +75,54 @@ func (s *store) DeactivateExpiredSubscriptions(ctx context.Context) error {
 	}
 
 	_, err := s.db.UpdateMany(ctx, filter, update)
+
+	return err
+}
+
+func (s *store) Update(ctx context.Context, userID int64, ID string, input Subscription) error {
+	ObjectID, err := primitive.ObjectIDFromHex(ID)
+	if err != nil {
+		return err
+	}
+
+	filter := bson.M{
+		"_id":     ObjectID,
+		"user_id": userID,
+	}
+	update := bson.M{
+		"$set": bson.M{
+			"plan_id":    input.PlanID,
+			"active":     input.Active,
+			"expires_at": input.ExpiresAt,
+		},
+	}
+
+	res, err := s.db.UpdateOne(ctx, filter, update)
+	if res.ModifiedCount == 0 {
+		return ErrSubscriptionNotFound
+	}
+
+	return err
+}
+
+func (s *store) DeactivateSubscription(ctx context.Context, userID int64, ID string) error {
+	ObjectID, err := primitive.ObjectIDFromHex(ID)
+	if err != nil {
+		return err
+	}
+
+	filter := bson.M{
+		"_id":     ObjectID,
+		"user_id": userID,
+	}
+	update := bson.M{
+		"$set": bson.M{"active": false},
+	}
+
+	res, err := s.db.UpdateOne(ctx, filter, update)
+	if res.ModifiedCount == 0 {
+		return ErrSubscriptionNotFound
+	}
 
 	return err
 }

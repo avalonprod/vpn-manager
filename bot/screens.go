@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 
@@ -16,6 +17,7 @@ const (
 	PostImportInstructionScreen = "post_import_instruction_screen"
 	SetupInstructionScreen      = "setup_instruction_screen"
 	ManualSetupScreen           = "manual_setup_screen"
+	SuccessPaymentScreen        = "success_payment_screen"
 )
 
 var store = map[int64][]telebot.StoredMessage{}
@@ -67,7 +69,7 @@ func (b *Bot) SendMessage(userID int64, screen *Screen) error {
 	return nil
 }
 
-func (b *Bot) GenerateStartScreen(userID int64) *Screen {
+func (b *Bot) BuildStartScreen(userID int64) *Screen {
 	keyword := &telebot.ReplyMarkup{}
 
 	keyword.Inline(
@@ -97,7 +99,7 @@ func (b *Bot) GenerateStartScreen(userID int64) *Screen {
 	}
 }
 
-func (b *Bot) GenerateTrialAccessScreen(userID int64) *Screen {
+func (b *Bot) BuildTrialAccessScreen(userID int64) *Screen {
 	keyword := &telebot.ReplyMarkup{}
 	keyword.Inline(
 		telebot.Row{
@@ -125,7 +127,7 @@ func (b *Bot) GenerateTrialAccessScreen(userID int64) *Screen {
 	}
 }
 
-func (b *Bot) GenerateAppsListScreen(userID int64) *Screen {
+func (b *Bot) BuildAppsListScreen(userID int64) *Screen {
 	keyword := &telebot.ReplyMarkup{}
 
 	keyword.Inline(
@@ -154,27 +156,31 @@ func (b *Bot) GenerateAppsListScreen(userID int64) *Screen {
 	}
 }
 
-func (b *Bot) GenerateSubscriptionsScreen(userID int64, context string, args ...string) *Screen {
+func (b *Bot) BuildSubscriptionsScreen(ctx context.Context, userID int64, screenCtx string, args ...string) (*Screen, error) {
 	keyword := &telebot.ReplyMarkup{}
+	plans, err := b.plansService.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
 
-	keyword.Inline(
-		telebot.Row{
-			{Text: "💳 1 месяц - 500 ₽", URL: "https://c.cloudpayments.ru/payments/1981efead06a4baab02a1bc2f23ca920"},
-		},
-		telebot.Row{
-			{Text: "💳 6 мес. + 2 мес. 🎁 - 350 ₽ / мес", URL: "https://c.cloudpayments.ru/payments/a0eb9ffcef944777a668c071530486ff"},
-		},
-		telebot.Row{
-			{Text: "💳 1 год + 3 мес. 🎁 - 280 ₽ / мес", URL: "https://c.cloudpayments.ru/payments/5d6126e5ca4c4b7689bdc8693d78c9be"},
-		},
-		telebot.Row{
-			{Text: "💳 2 года + 6 мес. 🎁 - 190 ₽ / мес", URL: "https://c.cloudpayments.ru/payments/1588814b133d465f859639af353101db"},
-		},
-		telebot.Row{
-			b.backButtonTo(context, args...),
-			supportButton,
-		},
-	)
+	rows := make([]telebot.Row, 0, len(plans))
+
+	for _, plan := range plans {
+		row := telebot.Row{
+			{
+				Text: plan.Title,
+				URL:  fmt.Sprintf(`%s/subscribe?plan=%s&user_id=%d`, b.apiUrl, plan.ID, userID),
+			},
+		}
+		rows = append(rows, row)
+	}
+
+	rows = append(rows, telebot.Row{
+		b.backButtonTo(screenCtx, args...),
+		supportButton,
+	})
+
+	keyword.Inline(rows...)
 
 	text := `
 <b>Выберите срок подписки.</b>
@@ -185,10 +191,10 @@ func (b *Bot) GenerateSubscriptionsScreen(userID int64, context string, args ...
 	return &Screen{
 		Text:     text,
 		Keyboard: keyword,
-	}
+	}, nil
 }
 
-func (b *Bot) GenerateSuccessScreen(userID int64, os string) *Screen {
+func (b *Bot) BuildSuccessScreen(userID int64, os string) *Screen {
 	keyword := &telebot.ReplyMarkup{}
 
 	keyword.Inline(
@@ -213,7 +219,7 @@ func (b *Bot) GenerateSuccessScreen(userID int64, os string) *Screen {
 	}
 }
 
-func (b *Bot) GenerateSetupScreen(userID int64, os string) *Screen {
+func (b *Bot) BuildSetupScreen(userID int64, os string) *Screen {
 	keyword := &telebot.ReplyMarkup{}
 
 	keyword.Inline(
@@ -235,7 +241,7 @@ func (b *Bot) GenerateSetupScreen(userID int64, os string) *Screen {
 	}
 }
 
-func (b *Bot) GeneratePostImportInstructionsScreen(userID int64, os string) *Screen {
+func (b *Bot) BuildPostImportInstructionsScreen(userID int64, os string) *Screen {
 	keyword := &telebot.ReplyMarkup{}
 
 	keyword.Inline(
@@ -265,7 +271,7 @@ func (b *Bot) GeneratePostImportInstructionsScreen(userID int64, os string) *Scr
 	}
 }
 
-func (b *Bot) GenerateManualSetupScreen(userID int64, os string) *Screen {
+func (b *Bot) BuildManualSetupScreen(userID int64, os string) *Screen {
 	keyword := &telebot.ReplyMarkup{}
 
 	keyword.Inline(
@@ -310,27 +316,27 @@ func (b *Bot) handleBack(c telebot.Context) error {
 
 	switch screen {
 	case StartScreen:
-		screen := b.GenerateStartScreen(user.ID)
+		screen := b.BuildStartScreen(user.ID)
 		return c.Edit(screen.Text, screen.Keyboard)
 	case TrialAccessScreen:
-		screen := b.GenerateTrialAccessScreen(user.ID)
+		screen := b.BuildTrialAccessScreen(user.ID)
 		return c.Edit(screen.Text, screen.Keyboard)
 	case AppListScreen:
-		screen := b.GenerateAppsListScreen(user.ID)
+		screen := b.BuildAppsListScreen(user.ID)
 		return c.Edit(screen.Text, screen.Keyboard)
 	case SuccessScreen:
 		if len(data) != 0 {
-			screen := b.GenerateSuccessScreen(user.ID, data[0])
+			screen := b.BuildSuccessScreen(user.ID, data[0])
 			return c.Edit(screen.Text, screen.Keyboard)
 		}
 	case SetupInstructionScreen:
 		if len(data) != 0 {
-			screen := b.GenerateSetupScreen(user.ID, data[0])
+			screen := b.BuildSetupScreen(user.ID, data[0])
 			return c.Edit(screen.Text, screen.Keyboard)
 		}
 	case PostImportInstructionScreen:
 		if len(data) != 0 {
-			screen := b.GeneratePostImportInstructionsScreen(user.ID, data[0])
+			screen := b.BuildPostImportInstructionsScreen(user.ID, data[0])
 			return c.Edit(screen.Text, screen.Keyboard)
 		}
 	default:
