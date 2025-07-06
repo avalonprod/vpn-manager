@@ -32,19 +32,25 @@ func (b *Bot) handleStart(c telebot.Context) error {
 }
 
 func (b *Bot) handleTrialAccess(c telebot.Context) error {
+	ctx := context.Background()
 	user := c.Sender()
-	err := b.subscriptionsService.CreateTrialSubscription(context.Background(), c.Sender().ID)
+	err := b.subscriptionsService.CreateTrialSubscription(ctx, c.Sender().ID)
 	if err != nil {
 		b.logger.Error(err)
 		return b.replyError(c, ErrDefault)
 	}
 
-	if err := b.peersService.ActivatePeer(context.Background(), user.ID); err != nil {
+	if err := b.peersService.ActivatePeer(ctx, user.ID); err != nil {
 		b.logger.Error(err)
 		return b.replyError(c, ErrDefault)
 	}
 
-	screen := b.BuildTrialAccessScreen(user.ID)
+	screen, err := b.BuildTrialAccessScreen(ctx, user.ID)
+	if err != nil {
+		b.logger.Error(err)
+		return err
+	}
+
 	if err := b.EditMessage(c, screen); err != nil {
 		b.logger.Error(err)
 		return err
@@ -88,7 +94,12 @@ func (b *Bot) handleSuccess(c telebot.Context) error {
 		os = args[0]
 	}
 
-	screen := b.BuildSuccessScreen(user.ID, os)
+	screen, err := b.BuildSuccessScreen(context.Background(), user.ID, os)
+	if err != nil {
+		b.logger.Error(err)
+		return err
+	}
+
 	if err := b.EditMessage(c, screen); err != nil {
 		b.logger.Error(err)
 		return err

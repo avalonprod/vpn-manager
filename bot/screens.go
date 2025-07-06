@@ -114,7 +114,12 @@ func (b *Bot) BuildStartScreen(userID int64) *Screen {
 	}
 }
 
-func (b *Bot) BuildTrialAccessScreen(userID int64) *Screen {
+func (b *Bot) BuildTrialAccessScreen(ctx context.Context, userID int64) (*Screen, error) {
+	subscription, err := b.subscriptionsService.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
 	keyword := &telebot.ReplyMarkup{}
 	keyword.Inline(
 		telebot.Row{
@@ -126,21 +131,21 @@ func (b *Bot) BuildTrialAccessScreen(userID int64) *Screen {
 		},
 	)
 
-	text := `
-🚀 <b>Ваша подписка активна до 07.06.2025</b>
+	text := fmt.Sprintf(`
+🚀 <b>Ваша подписка активна до %s</b>
 
 Бесплатный доступ: 3 дня
 
 Вы можете пользоваться ВПН на всех ваших устройствах, без ограничений.
 
 ❗️<b>Для начала скачайте наше приложение:</b>
-	`
+	`, subscription.ExpiresAt.String())
 
 	return &Screen{
 		Text:     text,
 		Keyboard: keyword,
 		Context:  TrialAccessScreen,
-	}
+	}, nil
 }
 
 func (b *Bot) BuildAppsListScreen(userID int64) *Screen {
@@ -212,7 +217,12 @@ func (b *Bot) BuildSubscriptionsScreen(ctx context.Context, userID int64, args .
 	}, nil
 }
 
-func (b *Bot) BuildSuccessScreen(userID int64, os string) *Screen {
+func (b *Bot) BuildSuccessScreen(ctx context.Context, userID int64, os string) (*Screen, error) {
+	subscription, err := b.subscriptionsService.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
 	keyword := &telebot.ReplyMarkup{}
 
 	keyword.Inline(
@@ -225,17 +235,17 @@ func (b *Bot) BuildSuccessScreen(userID int64, os string) *Screen {
 		},
 	)
 
-	text := `
+	text := fmt.Sprintf(`
 Если возникунт проблемы пишите нам
 
-Подписка действует до 07.06.2025
-	`
+Подписка действует до %s
+	`, subscription.ExpiresAt.String())
 
 	return &Screen{
 		Text:     text,
 		Keyboard: keyword,
 		Context:  SuccessScreen,
-	}
+	}, nil
 }
 
 func (b *Bot) BuildSetupScreen(userID int64, os string) *Screen {
@@ -444,14 +454,20 @@ func (b *Bot) handleBack(c telebot.Context) error {
 		screen := b.BuildStartScreen(user.ID)
 		return c.Edit(screen.Text, screen.Keyboard)
 	case TrialAccessScreen:
-		screen := b.BuildTrialAccessScreen(user.ID)
+		screen, err := b.BuildTrialAccessScreen(context.Background(), user.ID)
+		if err != nil {
+			return err
+		}
 		return c.Edit(screen.Text, screen.Keyboard)
 	case AppListScreen:
 		screen := b.BuildAppsListScreen(user.ID)
 		return c.Edit(screen.Text, screen.Keyboard)
 	case SuccessScreen:
 		if lenArgs != 0 {
-			screen := b.BuildSuccessScreen(user.ID, args[0])
+			screen, err := b.BuildSuccessScreen(context.Background(), user.ID, args[0])
+			if err != nil {
+				return err
+			}
 			return c.Edit(screen.Text, screen.Keyboard)
 		}
 	case SetupInstructionScreen:
