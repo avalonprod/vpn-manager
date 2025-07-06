@@ -35,6 +35,7 @@ type ISubscriptionsService interface {
 type IBot interface {
 	SendSetupInstruction(userID int64, os string) error
 	SendPostImportInstructions(userID int64, os string) error
+	SendSuccessPayment(userID int64) error
 }
 
 type Handler struct {
@@ -200,6 +201,12 @@ func (h *Handler) handlePayCloudPaymentsWebhook(w http.ResponseWriter, r *http.R
 	if err := h.subscriptionsService.CreateOrExtend(r.Context(), userID, invoiceID); err != nil {
 		log.Print(err)
 		http.Error(w, "failed to create a new subscription", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.bot.SendSuccessPayment(userID); err != nil {
+		log.Print(err)
+		http.Error(w, "failed to send success message", http.StatusBadRequest)
 		return
 	}
 

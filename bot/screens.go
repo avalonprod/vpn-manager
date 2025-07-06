@@ -4,20 +4,23 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"gopkg.in/telebot.v4"
 )
 
 const (
-	StartScreen                 = "start_screen"
-	TrialAccessScreen           = "trial_access_screen"
-	SubscriptionsScreen         = "subscriptions_screen"
-	AppListScreen               = "app_list_screen"
-	SuccessScreen               = "success_screen"
-	PostImportInstructionScreen = "post_import_instruction_screen"
-	SetupInstructionScreen      = "setup_instruction_screen"
-	ManualSetupScreen           = "manual_setup_screen"
-	SuccessPaymentScreen        = "success_payment_screen"
+	StartScreen                  = "start_screen"
+	TrialAccessScreen            = "trial_access_screen"
+	SubscriptionsScreen          = "subscriptions_screen"
+	AppListScreen                = "app_list_screen"
+	SuccessScreen                = "success_screen"
+	PostImportInstructionScreen  = "post_import_instruction_screen"
+	SetupInstructionScreen       = "setup_instruction_screen"
+	ManualSetupScreen            = "manual_setup_screen"
+	SuccessPaymentScreen         = "success_payment_screen"
+	SubscriptionManagementScreen = "subscription_management_screen"
+	CancelSubscriptionScreen     = "cancel_subscription_screen"
 )
 
 var store = map[int64][]telebot.StoredMessage{}
@@ -53,6 +56,7 @@ func (b *Bot) pushMessage(userID int64, msg *telebot.Message) {
 type Screen struct {
 	Text     string
 	Keyboard *telebot.ReplyMarkup
+	Context  string
 }
 
 func (b *Bot) SendMessage(userID int64, screen *Screen) error {
@@ -66,7 +70,17 @@ func (b *Bot) SendMessage(userID int64, screen *Screen) error {
 	}
 
 	b.pushMessage(userID, msg)
-	return nil
+	return b.stackStore.Push(context.Background(), userID, screen.Context)
+}
+
+func (b *Bot) EditMessage(c telebot.Context, screen *Screen) error {
+	err := c.Edit(screen.Text, screen.Keyboard)
+	if err != nil {
+		return err
+	}
+
+	b.pushMessage(c.Sender().ID, c.Message())
+	return b.stackStore.Push(context.Background(), c.Sender().ID, screen.Context)
 }
 
 func (b *Bot) BuildStartScreen(userID int64) *Screen {
@@ -74,10 +88,10 @@ func (b *Bot) BuildStartScreen(userID int64) *Screen {
 
 	keyword.Inline(
 		telebot.Row{
-			b.navigateButtonTo("Попробовать бесплатно", TrialAccessScreen, StartScreen),
+			b.navigateButtonTo("Попробовать бесплатно", TrialAccessScreen),
 		},
 		telebot.Row{
-			b.navigateButtonTo("Купить от 190р в месяц", SubscriptionsScreen, StartScreen),
+			b.navigateButtonTo("Купить от 190р в месяц", SubscriptionsScreen),
 		},
 	)
 
@@ -96,6 +110,7 @@ func (b *Bot) BuildStartScreen(userID int64) *Screen {
 	return &Screen{
 		Text:     text,
 		Keyboard: keyword,
+		Context:  StartScreen,
 	}
 }
 
@@ -103,11 +118,11 @@ func (b *Bot) BuildTrialAccessScreen(userID int64) *Screen {
 	keyword := &telebot.ReplyMarkup{}
 	keyword.Inline(
 		telebot.Row{
-			b.navigateButtonTo("Скачать приложение", AppListScreen, TrialAccessScreen),
+			b.navigateButtonTo("Скачать приложение", AppListScreen),
 		},
 		telebot.Row{
-			b.backButtonTo(StartScreen),
-			b.navigateButtonTo("Продлить подписку", SubscriptionsScreen, TrialAccessScreen),
+			b.backButton(),
+			b.navigateButtonTo("Продлить подписку", SubscriptionsScreen),
 		},
 	)
 
@@ -124,6 +139,7 @@ func (b *Bot) BuildTrialAccessScreen(userID int64) *Screen {
 	return &Screen{
 		Text:     text,
 		Keyboard: keyword,
+		Context:  TrialAccessScreen,
 	}
 }
 
@@ -139,7 +155,7 @@ func (b *Bot) BuildAppsListScreen(userID int64) *Screen {
 			{Text: "📱 Android", URL: fmt.Sprintf("%s/apps?user_id=%d&os=android", b.apiUrl, userID)},
 		},
 		telebot.Row{
-			b.backButtonTo(TrialAccessScreen),
+			b.backButton(),
 			supportButton,
 		},
 	)
@@ -153,10 +169,11 @@ func (b *Bot) BuildAppsListScreen(userID int64) *Screen {
 	return &Screen{
 		Text:     text,
 		Keyboard: keyword,
+		Context:  AppListScreen,
 	}
 }
 
-func (b *Bot) BuildSubscriptionsScreen(ctx context.Context, userID int64, screenCtx string, args ...string) (*Screen, error) {
+func (b *Bot) BuildSubscriptionsScreen(ctx context.Context, userID int64, args ...string) (*Screen, error) {
 	keyword := &telebot.ReplyMarkup{}
 	plans, err := b.plansService.GetAll(ctx)
 	if err != nil {
@@ -176,7 +193,7 @@ func (b *Bot) BuildSubscriptionsScreen(ctx context.Context, userID int64, screen
 	}
 
 	rows = append(rows, telebot.Row{
-		b.backButtonTo(screenCtx, args...),
+		b.backButton(args...),
 		supportButton,
 	})
 
@@ -191,6 +208,7 @@ func (b *Bot) BuildSubscriptionsScreen(ctx context.Context, userID int64, screen
 	return &Screen{
 		Text:     text,
 		Keyboard: keyword,
+		Context:  SubscriptionsScreen,
 	}, nil
 }
 
@@ -199,11 +217,11 @@ func (b *Bot) BuildSuccessScreen(userID int64, os string) *Screen {
 
 	keyword.Inline(
 		telebot.Row{
-			b.navigateButtonTo("Продлить доступ", SubscriptionsScreen, SuccessScreen, os),
+			b.navigateButtonTo("Продлить доступ", SubscriptionsScreen, os),
 			supportButton,
 		},
 		telebot.Row{
-			b.backButtonTo(PostImportInstructionScreen, os),
+			b.backButton(os),
 		},
 	)
 
@@ -216,6 +234,7 @@ func (b *Bot) BuildSuccessScreen(userID int64, os string) *Screen {
 	return &Screen{
 		Text:     text,
 		Keyboard: keyword,
+		Context:  SuccessScreen,
 	}
 }
 
@@ -227,7 +246,7 @@ func (b *Bot) BuildSetupScreen(userID int64, os string) *Screen {
 			{Text: "Автонастройка", URL: fmt.Sprintf("%s/setup?user_id=%d&os=%s", b.apiUrl, userID, os)},
 		},
 		telebot.Row{
-			b.backButtonTo(AppListScreen),
+			b.backButton(),
 		},
 	)
 
@@ -238,6 +257,7 @@ func (b *Bot) BuildSetupScreen(userID int64, os string) *Screen {
 	return &Screen{
 		Text:     text,
 		Keyboard: keyword,
+		Context:  SetupInstructionScreen,
 	}
 }
 
@@ -246,16 +266,16 @@ func (b *Bot) BuildPostImportInstructionsScreen(userID int64, os string) *Screen
 
 	keyword.Inline(
 		telebot.Row{
-			b.navigateButtonTo("Все заработало спасибо", SuccessScreen, PostImportInstructionScreen, os),
+			b.navigateButtonTo("Все заработало спасибо", SuccessScreen, os),
 		},
 		telebot.Row{
-			b.navigateButtonTo("Ручная настройка", ManualSetupScreen, PostImportInstructionScreen, os),
+			b.navigateButtonTo("Ручная настройка", ManualSetupScreen, os),
 		},
 		telebot.Row{
 			supportButton,
 		},
 		telebot.Row{
-			b.backButtonTo(SetupInstructionScreen, os),
+			b.backButton(os),
 		},
 	)
 
@@ -268,6 +288,7 @@ func (b *Bot) BuildPostImportInstructionsScreen(userID int64, os string) *Screen
 	return &Screen{
 		Text:     text,
 		Keyboard: keyword,
+		Context:  PostImportInstructionScreen,
 	}
 }
 
@@ -276,7 +297,7 @@ func (b *Bot) BuildManualSetupScreen(userID int64, os string) *Screen {
 
 	keyword.Inline(
 		telebot.Row{
-			b.backButtonTo(PostImportInstructionScreen, os),
+			b.backButton(os),
 		},
 	)
 
@@ -299,7 +320,111 @@ func (b *Bot) BuildManualSetupScreen(userID int64, os string) *Screen {
 	return &Screen{
 		Text:     text,
 		Keyboard: keyword,
+		Context:  ManualSetupScreen,
 	}
+}
+
+func (b *Bot) BuildSuccessPaymentScreen(ctx context.Context, userID int64) (*Screen, error) {
+	subscription, err := b.subscriptionsService.GetByUserID(context.Background(), userID)
+	if err != nil {
+		return nil, err
+	}
+
+	keyword := &telebot.ReplyMarkup{}
+
+	keyword.Inline(
+		telebot.Row{
+			b.navigateButtonTo("Скачать приложение", AppListScreen),
+		},
+		telebot.Row{
+			b.navigateButtonTo("Управление подпиской", SubscriptionManagementScreen),
+		},
+		telebot.Row{
+			supportButton,
+		},
+	)
+
+	text := fmt.Sprintf(`
+Ваша подписка активна до %s
+Вы можете пользоваться ВПН на всех ваших устройствах, без ограничений.
+	`, subscription.ExpiresAt.Format(time.DateOnly))
+
+	return &Screen{
+		Text:     text,
+		Keyboard: keyword,
+		Context:  SuccessPaymentScreen,
+	}, nil
+}
+
+func (b *Bot) BuildSubscriptionManagementScreen(ctx context.Context, userID int64) (*Screen, error) {
+	subscription, err := b.subscriptionsService.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	plan, err := b.plansService.GetByID(ctx, subscription.PlanID)
+	if err != nil {
+		return nil, err
+	}
+
+	keyword := &telebot.ReplyMarkup{}
+
+	keyword.Inline(
+		telebot.Row{
+			b.navigateButtonTo("Отменить подписку", CancelSubscriptionScreen),
+		},
+		telebot.Row{},
+		telebot.Row{
+			b.backButton(),
+		},
+	)
+
+	text := fmt.Sprintf(
+		`
+Управление подпиской
+Подписка продлевается автоматически.
+
+Ваш тариф: %s
+	`, plan.SubTitle)
+
+	return &Screen{
+		Text:     text,
+		Keyboard: keyword,
+		Context:  SubscriptionManagementScreen,
+	}, nil
+}
+
+func (b *Bot) BuildCancelSubscriptionScreen(ctx context.Context, userID int64) (*Screen, error) {
+	subscription, err := b.subscriptionsService.GetByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	keyword := &telebot.ReplyMarkup{}
+
+	keyword.Inline(
+		telebot.Row{
+			b.navigateButtonTo("Возобновить подписку", SubscriptionsScreen),
+		},
+		telebot.Row{},
+		telebot.Row{
+			b.backButton(),
+		},
+	)
+
+	text := fmt.Sprintf(`
+Управление подпиской
+
+Вы отменили подписку.
+
+Можете пользоваться VPN до: %s
+	`, subscription.ExpiresAt.Format(time.DateOnly))
+
+	return &Screen{
+		Text:     text,
+		Keyboard: keyword,
+		Context:  CancelSubscriptionScreen,
+	}, nil
 }
 
 func (b *Bot) handleBack(c telebot.Context) error {
@@ -307,12 +432,12 @@ func (b *Bot) handleBack(c telebot.Context) error {
 	_ = c.Respond()
 
 	args := c.Args()
-	if len(args) == 0 {
-		return nil
-	}
+	lenArgs := len(args)
 
-	screen := args[0]
-	data := args[1:]
+	screen, err := b.stackStore.PopAndPeek(context.Background(), user.ID)
+	if err != nil {
+		return err
+	}
 
 	switch screen {
 	case StartScreen:
@@ -325,20 +450,38 @@ func (b *Bot) handleBack(c telebot.Context) error {
 		screen := b.BuildAppsListScreen(user.ID)
 		return c.Edit(screen.Text, screen.Keyboard)
 	case SuccessScreen:
-		if len(data) != 0 {
-			screen := b.BuildSuccessScreen(user.ID, data[0])
+		if lenArgs != 0 {
+			screen := b.BuildSuccessScreen(user.ID, args[0])
 			return c.Edit(screen.Text, screen.Keyboard)
 		}
 	case SetupInstructionScreen:
-		if len(data) != 0 {
-			screen := b.BuildSetupScreen(user.ID, data[0])
+		if lenArgs != 0 {
+			screen := b.BuildSetupScreen(user.ID, args[0])
 			return c.Edit(screen.Text, screen.Keyboard)
 		}
 	case PostImportInstructionScreen:
-		if len(data) != 0 {
-			screen := b.BuildPostImportInstructionsScreen(user.ID, data[0])
+		if lenArgs != 0 {
+			screen := b.BuildPostImportInstructionsScreen(user.ID, args[0])
 			return c.Edit(screen.Text, screen.Keyboard)
 		}
+	case SuccessPaymentScreen:
+		screen, err := b.BuildSuccessPaymentScreen(context.Background(), user.ID)
+		if err != nil {
+			return err
+		}
+		return c.Edit(screen.Text, screen.Keyboard)
+	case SubscriptionManagementScreen:
+		screen, err := b.BuildSubscriptionManagementScreen(context.Background(), user.ID)
+		if err != nil {
+			return err
+		}
+		return c.Edit(screen.Text, screen.Keyboard)
+	case CancelSubscriptionScreen:
+		screen, err := b.BuildCancelSubscriptionScreen(context.Background(), user.ID)
+		if err != nil {
+			return err
+		}
+		return c.Edit(screen.Text, screen.Keyboard)
 	default:
 		return nil
 	}

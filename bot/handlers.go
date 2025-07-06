@@ -24,7 +24,11 @@ func (b *Bot) handleStart(c telebot.Context) error {
 	}
 
 	screen := b.BuildStartScreen(user.ID)
-	return b.SendMessage(user.ID, screen)
+	if err := b.SendMessage(user.ID, screen); err != nil {
+		b.logger.Error(err)
+		return err
+	}
+	return nil
 }
 
 func (b *Bot) handleTrialAccess(c telebot.Context) error {
@@ -41,63 +45,140 @@ func (b *Bot) handleTrialAccess(c telebot.Context) error {
 	}
 
 	screen := b.BuildTrialAccessScreen(user.ID)
-	return c.Edit(screen.Text, screen.Keyboard)
+	if err := b.EditMessage(c, screen); err != nil {
+		b.logger.Error(err)
+		return err
+	}
+
+	return nil
 }
 
 func (b *Bot) handleAppsList(c telebot.Context) error {
 	user := c.Sender()
 
 	screen := b.BuildAppsListScreen(user.ID)
-	return c.Edit(screen.Text, screen.Keyboard)
+	if err := b.EditMessage(c, screen); err != nil {
+		b.logger.Error(err)
+		return err
+	}
+	return nil
 }
 
 func (b *Bot) handleSubscribe(c telebot.Context) error {
 	user := c.Sender()
 
-	screen, err := b.BuildSubscriptionsScreen(context.Background(), user.ID, b.GetScreenFromCtx(c), b.GetArgsFromCtx(c)...)
+	screen, err := b.BuildSubscriptionsScreen(context.Background(), user.ID, c.Args()...)
 	if err != nil {
 		b.logger.Error(err)
 		return b.replyError(c, ErrDefault)
 	}
-	return c.Edit(screen.Text, screen.Keyboard)
+	if err := b.EditMessage(c, screen); err != nil {
+		b.logger.Error(err)
+		return err
+	}
+	return nil
 }
 
 func (b *Bot) handleSuccess(c telebot.Context) error {
 	user := c.Sender()
 
 	var os string
-	args := b.GetArgsFromCtx(c)
+	args := c.Args()
 	if len(args) > 0 {
 		os = args[0]
 	}
 
 	screen := b.BuildSuccessScreen(user.ID, os)
-	return c.Edit(screen.Text, screen.Keyboard)
+	if err := b.EditMessage(c, screen); err != nil {
+		b.logger.Error(err)
+		return err
+	}
+	return nil
+}
+
+func (b *Bot) handleCancelSubscription(c telebot.Context) error {
+	user := c.Sender()
+
+	screen, err := b.BuildCancelSubscriptionScreen(context.Background(), user.ID)
+	if err != nil {
+		b.logger.Error(err)
+		return b.replyError(c, ErrDefault)
+	}
+
+	if err := b.EditMessage(c, screen); err != nil {
+		b.logger.Error(err)
+		return err
+	}
+
+	return nil
+}
+
+func (b *Bot) handleSubscriptionManagement(c telebot.Context) error {
+	user := c.Sender()
+
+	screen, err := b.BuildSubscriptionManagementScreen(context.Background(), user.ID)
+	if err != nil {
+		b.logger.Error(err)
+		return b.replyError(c, ErrDefault)
+	}
+
+	if err := b.EditMessage(c, screen); err != nil {
+		b.logger.Error(err)
+		return err
+	}
+	return nil
 }
 
 func (b *Bot) SendSetupInstruction(userID int64, os string) error {
 	user := &telebot.User{ID: userID}
 
 	screen := b.BuildSetupScreen(userID, os)
-	return b.SendMessage(user.ID, screen)
+	if err := b.SendMessage(user.ID, screen); err != nil {
+		b.logger.Error(err)
+		return err
+	}
+	return nil
 }
 
 func (b *Bot) SendPostImportInstructions(userID int64, os string) error {
 	user := &telebot.User{ID: userID}
 
 	screen := b.BuildPostImportInstructionsScreen(userID, os)
-	return b.SendMessage(user.ID, screen)
+	if err := b.SendMessage(user.ID, screen); err != nil {
+		b.logger.Error(err)
+		return err
+	}
+	return nil
+}
+
+func (b *Bot) SendSuccessPayment(userID int64) error {
+	user := &telebot.User{ID: userID}
+
+	screen, err := b.BuildSuccessPaymentScreen(context.Background(), user.ID)
+	if err != nil {
+		return err
+	}
+
+	if err := b.SendMessage(user.ID, screen); err != nil {
+		b.logger.Error(err)
+		return err
+	}
+	return nil
 }
 
 func (b *Bot) handleManualSetup(c telebot.Context) error {
 	user := c.Sender()
 
 	var os string
-	args := b.GetArgsFromCtx(c)
+	args := c.Args()
 	if len(args) > 0 {
 		os = args[0]
 	}
 
 	screen := b.BuildManualSetupScreen(user.ID, os)
-	return c.Edit(screen.Text, screen.Keyboard)
+	if err := b.EditMessage(c, screen); err != nil {
+		b.logger.Error(err)
+		return err
+	}
+	return nil
 }

@@ -29,10 +29,12 @@ type IPeersService interface {
 
 type IPlansService interface {
 	GetAll(ctx context.Context) ([]plans.Plan, error)
+	GetByID(ctx context.Context, ID string) (plans.Plan, error)
 }
 
 type Bot struct {
 	bot                  *telebot.Bot
+	stackStore           StackStore
 	logger               logger.ILogger
 	usersService         IUsersService
 	serversService       IServersService
@@ -44,6 +46,7 @@ type Bot struct {
 
 func NewBot(
 	bot *telebot.Bot,
+	stackStore StackStore,
 	logger logger.ILogger,
 	usersService IUsersService,
 	serversService IServersService,
@@ -54,6 +57,7 @@ func NewBot(
 ) *Bot {
 	return &Bot{
 		bot:                  bot,
+		stackStore:           stackStore,
 		logger:               logger,
 		usersService:         usersService,
 		serversService:       serversService,
@@ -85,12 +89,9 @@ func (b *Bot) Run() {
 	handler.Handle(&telebot.Btn{Unique: SubscriptionsScreen}, b.handleSubscribe)
 	handler.Handle(&telebot.Btn{Unique: SuccessScreen}, b.handleSuccess)
 	handler.Handle(&telebot.Btn{Unique: ManualSetupScreen}, b.handleManualSetup)
-
+	handler.Handle(&telebot.Btn{Unique: CancelSubscriptionScreen}, b.handleCancelSubscription)
+	handler.Handle(&telebot.Btn{Unique: SubscriptionManagementScreen}, b.handleSubscriptionManagement)
 	handler.Handle(&telebot.Btn{Unique: "back"}, b.handleBack)
 
 	b.bot.Start()
-}
-
-func (b *Bot) replyError(c telebot.Context, msg string) error {
-	return c.Send(msg)
 }

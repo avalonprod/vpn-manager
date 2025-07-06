@@ -76,7 +76,8 @@ func main() {
 
 	scheduler := scheduler.NewScheduler(subscriptionsService, peersService, serversService, notifier, logger)
 
-	bot := bot.NewBot(b, logger, usersService, serversService, peersService, plansService, subscriptionsService, cfg.ApiUrl)
+	stackStore := bot.NewStackScreens(mongodb)
+	bot := bot.NewBot(b, *stackStore, logger, usersService, serversService, peersService, plansService, subscriptionsService, cfg.ApiUrl)
 
 	handler := api.NewHandler(peersService, plansService, paymentsService, subscriptionsService, bot, cfg.ApiUrl, cfg.Apps)
 

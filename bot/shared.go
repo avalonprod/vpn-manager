@@ -11,34 +11,14 @@ var (
 	supportButton = selector.URL("Поддержка", "t.me/neonguard_support")
 )
 
-func (b *Bot) backButtonTo(screen string, data ...string) telebot.Btn {
-	args := []string{screen}
-	args = append(args, data...)
+func (b *Bot) replyError(c telebot.Context, msg string) error {
+	return c.Send(msg)
+}
+
+func (b *Bot) backButton(args ...string) telebot.Btn {
 	return selector.Data("Назад", "back", args...)
 }
 
-func (b *Bot) navigateButtonTo(text, screen string, context string, args ...string) telebot.Btn {
-	data := []string{
-		context,
-	}
-	data = append(data, args...)
-	return selector.Data(text, screen, data...)
-}
-
-func (b *Bot) GetScreenFromCtx(c telebot.Context) string {
-	args := c.Args()
-	if len(args) > 0 {
-		return args[0]
-	}
-
-	return ""
-}
-
-func (b *Bot) GetArgsFromCtx(c telebot.Context) []string {
-	args := c.Args()
-	if len(args) > 1 {
-		return args[1:]
-	}
-
-	return []string{}
+func (b *Bot) navigateButtonTo(text, screen string, args ...string) telebot.Btn {
+	return selector.Data(text, screen, args...)
 }
