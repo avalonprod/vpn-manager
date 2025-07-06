@@ -40,11 +40,6 @@ func (b *Bot) handleTrialAccess(c telebot.Context) error {
 		return b.replyError(c, ErrDefault)
 	}
 
-	if err := b.peersService.ActivatePeer(ctx, user.ID); err != nil {
-		b.logger.Error(err)
-		return b.replyError(c, ErrDefault)
-	}
-
 	screen, err := b.BuildTrialAccessScreen(ctx, user.ID)
 	if err != nil {
 		b.logger.Error(err)

@@ -38,7 +38,7 @@ func (s *service) Create(ctx context.Context, userID int64) (Peer, error) {
 				UserID:    userID,
 				Email:     email,
 				UUID:      uuid,
-				IsActive:  false,
+				IsActive:  true,
 				CreatedAt: time.Now().UTC(),
 			}
 			id, err := s.store.Create(ctx, peer)

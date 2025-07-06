@@ -139,7 +139,7 @@ func (b *Bot) BuildTrialAccessScreen(ctx context.Context, userID int64) (*Screen
 Вы можете пользоваться ВПН на всех ваших устройствах, без ограничений.
 
 ❗️<b>Для начала скачайте наше приложение:</b>
-	`, subscription.ExpiresAt.String())
+	`, subscription.ExpiresAt.Format(time.DateOnly))
 
 	return &Screen{
 		Text:     text,
@@ -239,7 +239,7 @@ func (b *Bot) BuildSuccessScreen(ctx context.Context, userID int64, os string) (
 Если возникунт проблемы пишите нам
 
 Подписка действует до %s
-	`, subscription.ExpiresAt.String())
+	`, subscription.ExpiresAt.Format(time.DateOnly))
 
 	return &Screen{
 		Text:     text,

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -151,6 +152,11 @@ func (h *Handler) getSubs(w http.ResponseWriter, r *http.Request) {
 
 	peer, err := h.peersService.GetActivePeerByUserID(r.Context(), userID)
 	if err != nil {
+		if errors.Is(err, peers.ErrPeerNotFound) {
+			h.logger.Debugf("%s: subs not found: %w", op, err)
+			http.Error(w, "empty subs", http.StatusNotFound)
+			return
+		}
 		h.logger.Errorf("%s: failed to get active peers for user_id: %s error: %w", op, userID, err)
 		http.Error(w, "failed to get subs", http.StatusInternalServerError)
 		return
