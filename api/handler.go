@@ -3,13 +3,13 @@ package api
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"vpn-manager/core/config"
 	"vpn-manager/payments"
 	"vpn-manager/peers"
+	"vpn-manager/pkg/logger"
 	"vpn-manager/plans"
 
 	"github.com/gorilla/mux"
@@ -44,17 +44,19 @@ type Handler struct {
 	paymentsService      IPaymentsService
 	subscriptionsService ISubscriptionsService
 	bot                  IBot
+	logger               logger.ILogger
 	apiUrl               string
 	apps                 config.Apps
 }
 
-func NewHandler(peersService IPeersService, plansService IPlansService, paymentsService IPaymentsService, subscriptionsService ISubscriptionsService, bot IBot, apiUrl string, apps config.Apps) *Handler {
+func NewHandler(peersService IPeersService, plansService IPlansService, paymentsService IPaymentsService, subscriptionsService ISubscriptionsService, bot IBot, logger logger.ILogger, apiUrl string, apps config.Apps) *Handler {
 	return &Handler{
 		peersService:         peersService,
 		plansService:         plansService,
 		paymentsService:      paymentsService,
 		subscriptionsService: subscriptionsService,
 		bot:                  bot,
+		logger:               logger,
 		apiUrl:               apiUrl,
 		apps:                 apps,
 	}
@@ -74,16 +76,19 @@ func (h *Handler) RegisterRoutes() *mux.Router {
 }
 
 func (h *Handler) downloadApp(w http.ResponseWriter, r *http.Request) {
+	const op = "downloadApp"
+
 	query := r.URL.Query()
 
 	userID, err := strconv.ParseInt(query.Get("user_id"), 10, 64)
 	if err != nil {
+		h.logger.Warnf("%s: invalid user_id: %v error: %w", op, userID, err)
 		http.Error(w, "invalid user_id", http.StatusBadRequest)
 		return
 	}
 
 	if err := h.bot.SendSetupInstruction(userID, query.Get("os")); err != nil {
-		log.Print(err)
+		h.logger.Errorf("%s: failed to send setup instruction for user_id: %v error: %w", op, userID, err)
 		http.Error(w, "Failed to send setup instructions", http.StatusInternalServerError)
 		return
 	}
@@ -102,15 +107,19 @@ func (h *Handler) downloadApp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) setup(w http.ResponseWriter, r *http.Request) {
+	const op = "setup"
+
 	query := r.URL.Query()
 
 	userID, err := strconv.ParseInt(query.Get("user_id"), 10, 64)
 	if err != nil {
+		h.logger.Warnf("%s: invalid user_id: %v error: %w", op, userID, err)
 		http.Error(w, "invalid user_id", http.StatusBadRequest)
 		return
 	}
 
 	if err := h.bot.SendPostImportInstructions(userID, query.Get("os")); err != nil {
+		h.logger.Warnf("%s: failed to send post import instruction for user_id: %v error: %w", op, userID, err)
 		http.Error(w, "failed to send post import instructions", http.StatusInternalServerError)
 		return
 	}
@@ -130,16 +139,19 @@ func (h *Handler) setup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getSubs(w http.ResponseWriter, r *http.Request) {
+	const op = "getSubs"
 	query := r.URL.Query()
 
 	userID, err := strconv.ParseInt(query.Get("user_id"), 10, 64)
 	if err != nil {
+		h.logger.Warnf("%s: invalid user_id: %v error: %w", op, userID, err)
 		http.Error(w, "invalid user_id", http.StatusBadRequest)
 		return
 	}
 
 	peer, err := h.peersService.GetActivePeerByUserID(r.Context(), userID)
 	if err != nil {
+		h.logger.Errorf("%s: failed to get active peers for user_id: %s error: %w", op, userID, err)
 		http.Error(w, "failed to get subs", http.StatusInternalServerError)
 		return
 	}
@@ -154,6 +166,8 @@ func (h *Handler) getSubs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleCheckCloudPaymentsWebhook(w http.ResponseWriter, r *http.Request) {
+	const op = "handleCheckCloudPaymentsWebhook"
+
 	w.Header().Set("Content-Type", "application/json")
 
 	query := r.URL.Query()
@@ -163,12 +177,14 @@ func (h *Handler) handleCheckCloudPaymentsWebhook(w http.ResponseWriter, r *http
 
 	userID, err := strconv.ParseInt(accountId, 10, 64)
 	if err != nil {
+		h.logger.Warnf("%s: invalid user_id: %v error: %w", op, userID, err)
 		http.Error(w, "invalid user_id", http.StatusBadRequest)
 		return
 	}
 
 	_, err = h.paymentsService.GetInvoiceByID(r.Context(), userID, invoiceId)
 	if err != nil {
+		h.logger.Errorf("%s: failed to find invoice with id: %s for user_id: %s error: %w", op, invoiceId, userID, err)
 		w.Write([]byte(`{"code":13}`))
 		return
 	}
@@ -184,7 +200,9 @@ type PayRequest struct {
 }
 
 func (h *Handler) handlePayCloudPaymentsWebhook(w http.ResponseWriter, r *http.Request) {
+	const op = "handlePayCloudPaymentsWebhook"
 	if err := r.ParseForm(); err != nil {
+		h.logger.Error("%s: failed to parse form: %w", op, err)
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
 	}
@@ -194,18 +212,19 @@ func (h *Handler) handlePayCloudPaymentsWebhook(w http.ResponseWriter, r *http.R
 
 	userID, err := strconv.ParseInt(accountID, 10, 64)
 	if err != nil {
+		h.logger.Warnf("%s: invalid user_id: %v error: %w", op, userID, err)
 		http.Error(w, "invalid user_id", http.StatusBadRequest)
 		return
 	}
 
 	if err := h.subscriptionsService.CreateOrExtend(r.Context(), userID, invoiceID); err != nil {
-		log.Print(err)
+		h.logger.Errorf("%s: failed to create subscription for user_id: %d error: %w", op, userID, err)
 		http.Error(w, "failed to create a new subscription", http.StatusBadRequest)
 		return
 	}
 
 	if err := h.bot.SendSuccessPayment(userID); err != nil {
-		log.Print(err)
+		h.logger.Errorf("%s: failed to send success message for user_id: %d error: %w", op, userID, err)
 		http.Error(w, "failed to send success message", http.StatusBadRequest)
 		return
 	}
@@ -215,11 +234,13 @@ func (h *Handler) handlePayCloudPaymentsWebhook(w http.ResponseWriter, r *http.R
 }
 
 func (h *Handler) handleSubscribe(w http.ResponseWriter, r *http.Request) {
+	const op = "handleSubscribe"
 	query := r.URL.Query()
 
 	planID := query.Get("plan")
 	userID, err := strconv.ParseInt(query.Get("user_id"), 10, 64)
 	if err != nil {
+		h.logger.Warnf("%s: invalid user_id: %v error: %w", op, userID, err)
 		http.Error(w, "invalid user_id", http.StatusBadRequest)
 		return
 	}
@@ -229,6 +250,7 @@ func (h *Handler) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 		UserID: userID,
 	})
 	if err != nil {
+		h.logger.Errorf("%s: failed to create invoice user_id: %d error: %w", op, userID, err)
 		http.Error(w, "failed to create invoice", http.StatusBadGateway)
 		return
 	}

@@ -79,7 +79,7 @@ func main() {
 	stackStore := bot.NewStackScreens(mongodb)
 	bot := bot.NewBot(b, *stackStore, logger, usersService, serversService, peersService, plansService, subscriptionsService, cfg.ApiUrl)
 
-	handler := api.NewHandler(peersService, plansService, paymentsService, subscriptionsService, bot, cfg.ApiUrl, cfg.Apps)
+	handler := api.NewHandler(peersService, plansService, paymentsService, subscriptionsService, bot, logger, cfg.ApiUrl, cfg.Apps)
 
 	srv := server.NewServer(&server.HttpConfig{
 		Port: cfg.Port,
