@@ -7,8 +7,10 @@ const (
 )
 
 var (
-	selector      = &telebot.ReplyMarkup{}
-	supportButton = selector.URL("Поддержка", "t.me/neonguard_support")
+	selector            = &telebot.ReplyMarkup{}
+	supportButton       = selector.URL("Поддержка", "t.me/neonguard_support")
+	ofertaButton        = selector.URL("Оферта", "https://neonguard.ru/oferta")
+	privacyPolicyButton = selector.URL("Политика конфиденциальности", "https://neonguard.ru/popd")
 )
 
 func (b *Bot) replyError(c telebot.Context, msg string) error {

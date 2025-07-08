@@ -93,6 +93,12 @@ func (b *Bot) BuildStartScreen(userID int64) *Screen {
 		telebot.Row{
 			b.navigateButtonTo("Купить от 190р в месяц", SubscriptionsScreen),
 		},
+		telebot.Row{
+			ofertaButton,
+		},
+		telebot.Row{
+			privacyPolicyButton,
+		},
 	)
 
 	text := `
@@ -227,11 +233,19 @@ func (b *Bot) BuildSuccessScreen(ctx context.Context, userID int64, os string) (
 
 	keyword.Inline(
 		telebot.Row{
+			b.navigateButtonTo("Скачать приложение", AppListScreen),
+		},
+		telebot.Row{
 			b.navigateButtonTo("Продлить доступ", SubscriptionsScreen, os),
+		},
+		telebot.Row{
 			supportButton,
 		},
 		telebot.Row{
-			b.backButton(os),
+			ofertaButton,
+		},
+		telebot.Row{
+			privacyPolicyButton,
 		},
 	)
 
@@ -351,6 +365,12 @@ func (b *Bot) BuildSuccessPaymentScreen(ctx context.Context, userID int64) (*Scr
 		},
 		telebot.Row{
 			supportButton,
+		},
+		telebot.Row{
+			ofertaButton,
+		},
+		telebot.Row{
+			privacyPolicyButton,
 		},
 	)
 
