@@ -122,3 +122,19 @@ func (s *service) GetExpiredSubscriptions(ctx context.Context) ([]Subscription, 
 func (s *service) DeactivateExpiredSubscriptions(ctx context.Context) error {
 	return s.store.DeactivateExpiredSubscriptions(ctx)
 }
+
+func (s *service) IsSubscriptionActive(ctx context.Context, userID int64) (bool, error) {
+	subscription, err := s.store.GetByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, ErrSubscriptionNotFound) {
+			return false, ErrSubscriptionNotFound
+		}
+		return false, err
+	}
+
+	if !subscription.Active {
+		return false, nil
+	}
+
+	return true, nil
+}

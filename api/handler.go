@@ -31,6 +31,7 @@ type IPaymentsService interface {
 
 type ISubscriptionsService interface {
 	CreateOrExtend(ctx context.Context, userID int64, invoiceID string) error
+	IsSubscriptionActive(ctx context.Context, userID int64) (bool, error)
 }
 
 type IBot interface {
@@ -66,8 +67,8 @@ func NewHandler(peersService IPeersService, plansService IPlansService, payments
 func (h *Handler) RegisterRoutes() *mux.Router {
 	r := mux.NewRouter()
 
-	r.HandleFunc("/subs", h.getSubs).Methods("GET")
-	r.HandleFunc("/setup", h.setup).Methods("GET")
+	r.Handle("/subs", h.AccessGuard(http.HandlerFunc(h.getSubs))).Methods("GET")
+	r.Handle("/setup", h.AccessGuard(http.HandlerFunc(h.setup))).Methods("GET")
 	r.HandleFunc("/apps", h.downloadApp).Methods("GET")
 	r.HandleFunc("/subscribe", h.handleSubscribe).Methods("GET")
 	r.HandleFunc("/cloudpayments/webhook/check", h.handleCheckCloudPaymentsWebhook).Methods("GET")
