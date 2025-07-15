@@ -15,6 +15,7 @@ type IStore interface {
 	GetExpiredSubscriptions(ctx context.Context) ([]Subscription, error)
 	GetByUserID(ctx context.Context, userID int64) (*Subscription, error)
 	DeactivateSubscription(ctx context.Context, userID int64, ID string) error
+	CancelSubscription(ctx context.Context, userID int64) error
 }
 
 type IPlansService interface {
@@ -62,19 +63,21 @@ func (s *service) CreateOrExtend(ctx context.Context, userID int64, invoiceID st
 
 	if errors.Is(err, ErrSubscriptionNotFound) {
 		if err := s.store.Create(ctx, Subscription{
-			UserID:    userID,
-			PlanID:    plan.ID,
-			Active:    true,
-			ExpiresAt: time.Now().UTC().Add(time.Duration(plan.DurationDays) * 24 * time.Hour),
-			CreatedAt: time.Now().UTC(),
+			UserID:      userID,
+			PlanID:      plan.ID,
+			Active:      true,
+			AutoRenewal: true,
+			ExpiresAt:   time.Now().UTC().Add(time.Duration(plan.DurationDays) * 24 * time.Hour),
+			CreatedAt:   time.Now().UTC(),
 		}); err != nil {
 			return err
 		}
 	} else {
 		if err := s.store.Update(ctx, userID, subscription.ID, Subscription{
-			PlanID:    plan.ID,
-			Active:    true,
-			ExpiresAt: subscription.ExpiresAt.Add(time.Duration(plan.DurationDays) * 24 * time.Hour),
+			PlanID:      plan.ID,
+			Active:      true,
+			AutoRenewal: true,
+			ExpiresAt:   subscription.ExpiresAt.Add(time.Duration(plan.DurationDays) * 24 * time.Hour),
 		}); err != nil {
 			return err
 		}
@@ -96,11 +99,12 @@ func (s *service) CreateTrialSubscription(ctx context.Context, userID int64) err
 	}
 
 	err = s.store.Create(ctx, Subscription{
-		UserID:    userID,
-		PlanID:    "trial",
-		Active:    true,
-		ExpiresAt: time.Now().UTC().Add(3 * 24 * time.Hour),
-		CreatedAt: time.Now().UTC(),
+		UserID:      userID,
+		PlanID:      "trial",
+		Active:      true,
+		AutoRenewal: false,
+		ExpiresAt:   time.Now().UTC().Add(3 * 24 * time.Hour),
+		CreatedAt:   time.Now().UTC(),
 	})
 
 	return err
@@ -137,4 +141,8 @@ func (s *service) IsSubscriptionActive(ctx context.Context, userID int64) (bool,
 	}
 
 	return true, nil
+}
+
+func (s *service) CancelSubscription(ctx context.Context, userID int64) error {
+	return s.store.CancelSubscription(ctx, userID)
 }

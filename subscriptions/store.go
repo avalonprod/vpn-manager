@@ -126,3 +126,19 @@ func (s *store) DeactivateSubscription(ctx context.Context, userID int64, ID str
 
 	return err
 }
+
+func (s *store) CancelSubscription(ctx context.Context, userID int64) error {
+	filter := bson.M{
+		"user_id": userID,
+	}
+	update := bson.M{
+		"$set": bson.M{"auto_renewal": false},
+	}
+
+	res, err := s.db.UpdateOne(ctx, filter, update)
+	if res.ModifiedCount == 0 {
+		return ErrSubscriptionNotFound
+	}
+
+	return err
+}

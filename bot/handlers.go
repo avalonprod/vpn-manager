@@ -105,6 +105,11 @@ func (b *Bot) handleSuccess(c telebot.Context) error {
 func (b *Bot) handleCancelSubscription(c telebot.Context) error {
 	user := c.Sender()
 
+	if err := b.subscriptionsService.CancelSubscription(context.Background(), user.ID); err != nil {
+		b.logger.Error(err)
+		return b.replyError(c, ErrDefault)
+	}
+
 	screen, err := b.BuildCancelSubscriptionScreen(context.Background(), user.ID)
 	if err != nil {
 		b.logger.Error(err)

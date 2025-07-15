@@ -17,6 +17,7 @@ type IUsersService interface {
 type ISubscriptionsService interface {
 	CreateTrialSubscription(ctx context.Context, userID int64) error
 	GetByUserID(ctx context.Context, userID int64) (subscriptions.Subscription, error)
+	CancelSubscription(ctx context.Context, userID int64) error
 }
 
 type IServersService interface {

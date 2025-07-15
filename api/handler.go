@@ -48,15 +48,17 @@ type Handler struct {
 	bot                  IBot
 	logger               logger.ILogger
 	apiUrl               string
+	cloudPaymentsSecret  string
 	apps                 config.Apps
 }
 
-func NewHandler(peersService IPeersService, plansService IPlansService, paymentsService IPaymentsService, subscriptionsService ISubscriptionsService, bot IBot, logger logger.ILogger, apiUrl string, apps config.Apps) *Handler {
+func NewHandler(peersService IPeersService, plansService IPlansService, paymentsService IPaymentsService, subscriptionsService ISubscriptionsService, cloudPaymentsSecret string, bot IBot, logger logger.ILogger, apiUrl string, apps config.Apps) *Handler {
 	return &Handler{
 		peersService:         peersService,
 		plansService:         plansService,
 		paymentsService:      paymentsService,
 		subscriptionsService: subscriptionsService,
+		cloudPaymentsSecret:  cloudPaymentsSecret,
 		bot:                  bot,
 		logger:               logger,
 		apiUrl:               apiUrl,
@@ -213,7 +215,6 @@ func (h *Handler) handlePayCloudPaymentsWebhook(w http.ResponseWriter, r *http.R
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
 	}
-
 	accountID := r.FormValue("AccountId")
 	invoiceID := r.FormValue("InvoiceId")
 
