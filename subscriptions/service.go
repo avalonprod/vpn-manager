@@ -16,6 +16,7 @@ type IStore interface {
 	GetByUserID(ctx context.Context, userID int64) (*Subscription, error)
 	DeactivateSubscription(ctx context.Context, userID int64, ID string) error
 	CancelSubscription(ctx context.Context, userID int64) error
+	GetAllTrialSubscriptions(ctx context.Context) ([]Subscription, error)
 }
 
 type IPlansService interface {
@@ -145,4 +146,8 @@ func (s *service) IsSubscriptionActive(ctx context.Context, userID int64) (bool,
 
 func (s *service) CancelSubscription(ctx context.Context, userID int64) error {
 	return s.store.CancelSubscription(ctx, userID)
+}
+
+func (s *service) GetAllTrialSubscriptions(ctx context.Context) ([]Subscription, error) {
+	return s.store.GetAllTrialSubscriptions(ctx)
 }

@@ -142,3 +142,20 @@ func (s *store) CancelSubscription(ctx context.Context, userID int64) error {
 
 	return err
 }
+
+func (s *store) GetAllTrialSubscriptions(ctx context.Context) ([]Subscription, error) {
+	cursor, err := s.db.Find(ctx, bson.M{
+		"plan_id": "trial",
+	})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var subscriptions []Subscription
+	if err := cursor.All(ctx, &subscriptions); err != nil {
+		return nil, err
+	}
+
+	return subscriptions, nil
+}

@@ -42,3 +42,26 @@ func (s *store) GetByID(ctx context.Context, ID int64) (User, error) {
 
 	return user, nil
 }
+
+func (s *store) GetAll(ctx context.Context) ([]User, error) {
+	cursor, err := s.db.Find(ctx, map[string]interface{}{})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var users []User
+	for cursor.Next(ctx) {
+		var user User
+		if err := cursor.Decode(&user); err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+
+	if err := cursor.Err(); err != nil {
+		return nil, err
+	}
+
+	return users, nil
+}

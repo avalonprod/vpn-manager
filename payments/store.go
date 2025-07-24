@@ -63,3 +63,27 @@ func (s *store) SetStatus(ctx context.Context, userID int64, ID, status string) 
 	_, err = s.db.UpdateOne(ctx, filter, update)
 	return err
 }
+
+func (s *store) GetAllCompletedInvoices(ctx context.Context) ([]Invoice, error) {
+	filter := bson.M{"status": StatusCompleted}
+	cursor, err := s.db.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var invoices []Invoice
+	for cursor.Next(ctx) {
+		var invoice Invoice
+		if err := cursor.Decode(&invoice); err != nil {
+			return nil, err
+		}
+		invoices = append(invoices, invoice)
+	}
+
+	if err := cursor.Err(); err != nil {
+		return nil, err
+	}
+
+	return invoices, nil
+}

@@ -1,7 +1,9 @@
 package config
 
 import (
+	"log"
 	"os"
+	"strconv"
 )
 
 type (
@@ -12,6 +14,7 @@ type (
 		ServerPanelPassword  string
 		ApiUrl               string
 		Port                 string
+		AnalyticsChanelID    int
 		MongoDB              MongoDB
 		Apps                 Apps
 		CloudPayments        CloudPayments
@@ -54,6 +57,12 @@ func MustLoad() *Config {
 	cfg.CloudPayments.PublicID = os.Getenv("CLOUDPAYMENTS_PUBLIC_ID")
 	cfg.CloudPayments.SecretKey = os.Getenv("CLOUDPAYMENTS_SECRET")
 	cfg.CloudPayments.ApiUrl = os.Getenv("CLOUDPAMENTS_API_URL")
+
+	analyticsChanelID, err := strconv.Atoi(os.Getenv("ANALYTICS_CHANNEL_ID"))
+	if err != nil {
+		log.Fatal("Invalid ANALYTICS_CHANNEL_ID:", err)
+	}
+	cfg.AnalyticsChanelID = analyticsChanelID
 
 	return &cfg
 }
