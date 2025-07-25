@@ -71,7 +71,7 @@ func main() {
 }
 
 func runDataExporter(ctx context.Context, exporter *analytics.Exporter) {
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(1 * time.Hour)
 	for {
 		select {
 		case <-ticker.C:
@@ -97,7 +97,7 @@ func runDataExporter(ctx context.Context, exporter *analytics.Exporter) {
 }
 
 func runAnalyticsUpdater(ctx context.Context, analytics *analytics.Analytics) {
-	ticker := time.NewTicker(3 * time.Second)
+	ticker := time.NewTicker(1 * time.Hour)
 	for {
 		select {
 		case <-ticker.C:
