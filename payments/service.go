@@ -138,7 +138,3 @@ func (s *service) GetInvoiceByID(ctx context.Context, userID int64, ID string) (
 func (s *service) SetStatus(ctx context.Context, userID int64, ID, status string) error {
 	return s.store.SetStatus(ctx, userID, ID, status)
 }
-
-func (s *service) GetAllCompletedInvoices(ctx context.Context) ([]Invoice, error) {
-	return s.store.GetAllCompletedInvoices(ctx)
-}

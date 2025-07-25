@@ -87,3 +87,13 @@ func (s *store) GetAllCompletedInvoices(ctx context.Context) ([]Invoice, error) 
 
 	return invoices, nil
 }
+
+func (s *store) CountCompletedInvoices(ctx context.Context) (int64, error) {
+	filter := bson.M{"status": StatusCompleted}
+	count, err := s.db.CountDocuments(ctx, filter)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}

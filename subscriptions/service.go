@@ -147,7 +147,3 @@ func (s *service) IsSubscriptionActive(ctx context.Context, userID int64) (bool,
 func (s *service) CancelSubscription(ctx context.Context, userID int64) error {
 	return s.store.CancelSubscription(ctx, userID)
 }
-
-func (s *service) GetAllTrialSubscriptions(ctx context.Context) ([]Subscription, error) {
-	return s.store.GetAllTrialSubscriptions(ctx)
-}

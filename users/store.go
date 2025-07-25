@@ -65,3 +65,12 @@ func (s *store) GetAll(ctx context.Context) ([]User, error) {
 
 	return users, nil
 }
+
+func (s *store) CountUsers(ctx context.Context) (int64, error) {
+	count, err := s.db.CountDocuments(ctx, map[string]interface{}{})
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
+}

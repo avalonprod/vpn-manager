@@ -2,103 +2,54 @@ package analytics
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"sync"
-	"vpn-manager/payments"
 	"vpn-manager/pkg/logger"
-	"vpn-manager/subscriptions"
-	"vpn-manager/users"
-
-	"gopkg.in/telebot.v4"
 )
 
-type IUsersService interface {
-	GetAll(ctx context.Context) ([]users.User, error)
-}
-
-type ISubscriptionsService interface {
-	GetAllTrialSubscriptions(ctx context.Context) ([]subscriptions.Subscription, error)
-}
-
-type IPaymentsService interface {
-	GetAllCompletedInvoices(ctx context.Context) ([]payments.Invoice, error)
-}
-
 type Analytics struct {
-	bot                  *telebot.Bot
-	userService          IUsersService
-	subscriptionsService ISubscriptionsService
-	paymentsService      IPaymentsService
-	logger               logger.ILogger
-	analyticsChatID      int64
-	messageID            int
-	mu                   sync.Mutex
+	sheets             ISheetsWriter
+	usersStore         IUsersStore
+	subscriptionsStore ISubscriptionsStore
+	paymentsStore      IPaymentsStore
+	logger             logger.ILogger
 }
 
-func NewAnalytics(bot *telebot.Bot, userService IUsersService, subscriptionsService ISubscriptionsService, paymentsService IPaymentsService, logger logger.ILogger, analyticsChatID int64) *Analytics {
+func NewAnalytics(sheetsWriter ISheetsWriter, usersStore IUsersStore, subscriptionsStore ISubscriptionsStore, paymentsStore IPaymentsStore, logger logger.ILogger) *Analytics {
 	return &Analytics{
-		bot:                  bot,
-		userService:          userService,
-		subscriptionsService: subscriptionsService,
-		paymentsService:      paymentsService,
-		logger:               logger,
-		analyticsChatID:      analyticsChatID,
-		mu:                   sync.Mutex{},
+		sheets:             sheetsWriter,
+		usersStore:         usersStore,
+		subscriptionsStore: subscriptionsStore,
+		paymentsStore:      paymentsStore,
+		logger:             logger,
 	}
 }
 
-func (a *Analytics) UpdateAnalyticsData(ctx context.Context) {
-	users, err := a.userService.GetAll(ctx)
+func (a *Analytics) UpdateAnalyticsData(ctx context.Context) error {
+	usersCount, err := a.usersStore.CountUsers(ctx)
 	if err != nil {
-		a.logger.Error("Failed to get users:", err)
-		return
+		return fmt.Errorf("failed to count users: %w", err)
 	}
 
-	subscriptions, err := a.subscriptionsService.GetAllTrialSubscriptions(ctx)
+	subscriptionsCount, err := a.subscriptionsStore.CountTrialSubscriptions(ctx)
 	if err != nil {
-		a.logger.Error("Failed to get trial subscriptions:", err)
-		return
+		return fmt.Errorf("failed to count trial subscriptions: %w", err)
 	}
 
-	invoices, err := a.paymentsService.GetAllCompletedInvoices(ctx)
+	invoicesCount, err := a.paymentsStore.CountCompletedInvoices(ctx)
 	if err != nil {
-		a.logger.Error("Failed to get completed invoices:", err)
-		return
+		return fmt.Errorf("failed to count completed invoices: %w", err)
 	}
 
-	message := fmt.Sprintf(`
-📊 Статистика VPN
-
-👥 Пользователи: %d
-🎁 Пробные подписки: %d
-💳 Оплаченные подписки: %d
-	`, len(users), len(subscriptions), len(invoices))
-	if a.messageID == 0 {
-		msg, err := a.bot.Send(&telebot.Chat{ID: a.analyticsChatID}, message)
-		if err != nil {
-			a.logger.Error("Failed to send analytics message:", err)
-		}
-
-		a.mu.Lock()
-		a.messageID = msg.ID
-		a.mu.Unlock()
-
-		return
+	if err := a.sheets.ClearSheet(ctx); err != nil {
+		return fmt.Errorf("failed to clear analytics sheet: %w", err)
 	}
 
-	_, err = a.bot.Edit(&telebot.Message{
-		ID: a.messageID,
-		Chat: &telebot.Chat{
-			ID: a.analyticsChatID,
-		},
-	}, message)
-	if err != nil {
-		if errors.Is(err, telebot.ErrMessageNotModified) {
-			return
-		}
-		a.logger.Error("Failed to edit analytics message:", err)
-
-		return
+	if err := a.sheets.WriteData(ctx, [][]interface{}{
+		{"👥 Пользователи", "🎁 Пробные подписки", "💳 Оплаченные подписки"},
+		{usersCount, subscriptionsCount, invoicesCount},
+	}); err != nil {
+		return fmt.Errorf("failed to write data to analytics sheet: %w", err)
 	}
+
+	return nil
 }

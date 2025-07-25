@@ -41,7 +41,3 @@ func (s *service) Register(ctx context.Context, input CreateUserInput) error {
 
 	return nil
 }
-
-func (s *service) GetAll(ctx context.Context) ([]User, error) {
-	return s.store.GetAll(ctx)
-}

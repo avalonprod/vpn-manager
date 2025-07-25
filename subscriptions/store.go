@@ -159,3 +159,43 @@ func (s *store) GetAllTrialSubscriptions(ctx context.Context) ([]Subscription, e
 
 	return subscriptions, nil
 }
+
+func (s *store) GetSubscriptionsForUsers(ctx context.Context, userIDs []int64) (map[int64]Subscription, error) {
+	if len(userIDs) == 0 {
+		return map[int64]Subscription{}, nil
+	}
+
+	cur, err := s.db.Find(ctx, bson.M{
+		"user_id": bson.M{"$in": userIDs},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	defer cur.Close(ctx)
+
+	subs := make(map[int64]Subscription)
+
+	for cur.Next(ctx) {
+		var s Subscription
+		if err := cur.Decode(&s); err != nil {
+			return nil, err
+		}
+
+		subs[s.UserID] = s
+	}
+
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return subs, nil
+}
+
+func (s *store) CountTrialSubscriptions(ctx context.Context) (int64, error) {
+	count, err := s.db.CountDocuments(ctx, bson.M{"plan_id": "trial"})
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
