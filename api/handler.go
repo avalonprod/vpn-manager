@@ -18,6 +18,7 @@ import (
 
 type IPeersService interface {
 	GetActivePeerByUserID(ctx context.Context, userID int64) (peers.Peer, error)
+	SetImported(ctx context.Context, userID int64) error
 }
 
 type IPlansService interface {
@@ -169,6 +170,12 @@ func (h *Handler) getSubs(w http.ResponseWriter, r *http.Request) {
 
 	for _, sub := range peer.Subs {
 		subs = append(subs, sub.URL)
+	}
+
+	if err := h.peersService.SetImported(r.Context(), userID); err != nil {
+		h.logger.Errorf("%s: failed to set imported for user_id: %d error: %w", op, userID, err)
+		http.Error(w, "failed to set imported", http.StatusInternalServerError)
+		return
 	}
 
 	fmt.Fprint(w, strings.Join(subs, "\n"))

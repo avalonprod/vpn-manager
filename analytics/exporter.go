@@ -10,6 +10,7 @@ type Exporter struct {
 	usersStore         IUsersStore
 	subscriptionsStore ISubscriptionsStore
 	paymentsStore      IPaymentsStore
+	peersStore         IPeersStore
 }
 
 func NewExporter(
@@ -17,18 +18,20 @@ func NewExporter(
 	usersStore IUsersStore,
 	subscriptionsStore ISubscriptionsStore,
 	paymentsStore IPaymentsStore,
+	peersStore IPeersStore,
 ) *Exporter {
 	return &Exporter{
 		sheets:             sheetsWriter,
 		usersStore:         usersStore,
 		subscriptionsStore: subscriptionsStore,
 		paymentsStore:      paymentsStore,
+		peersStore:         peersStore,
 	}
 }
 
 func (e *Exporter) ExportOverview(ctx context.Context) error {
 	var rows [][]interface{}
-	rows = append(rows, []interface{}{"First Name", "Username", "Started At", "Plan", "Subscription Is Active", "Expires At", "Subscription Created At"})
+	rows = append(rows, []interface{}{"First Name", "Username", "Started At", "Plan", "Subscription Is Active", "Expires At", "Subscription Created At", "Is Imported Peer", "Imported At"})
 
 	users, err := e.usersStore.GetAll(ctx)
 	if err != nil {
@@ -46,6 +49,11 @@ func (e *Exporter) ExportOverview(ctx context.Context) error {
 		return fmt.Errorf("failed to get subscriptions: %w", err)
 	}
 
+	peers, err := e.peersStore.GetPeersForUsers(ctx, userIds)
+	if err != nil {
+		return fmt.Errorf("failed to get peers: %w", err)
+	}
+
 	for _, user := range users {
 		rows = append(rows, []interface{}{
 			user.FirstName,
@@ -55,6 +63,8 @@ func (e *Exporter) ExportOverview(ctx context.Context) error {
 			subscriptions[user.ID].Active,
 			subscriptions[user.ID].ExpiresAt.Format("2006-01-02 15:04:05"),
 			subscriptions[user.ID].CreatedAt.Format("2006-01-02 15:04:05"),
+			peers[user.ID].IsImported,
+			peers[user.ID].ImportedAt.Format("2006-01-02 15:04:05"),
 		})
 	}
 

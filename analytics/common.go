@@ -3,6 +3,7 @@ package analytics
 import (
 	"context"
 	"vpn-manager/payments"
+	"vpn-manager/peers"
 	"vpn-manager/subscriptions"
 	"vpn-manager/users"
 )
@@ -25,4 +26,8 @@ type ISubscriptionsStore interface {
 type IPaymentsStore interface {
 	GetAllCompletedInvoices(ctx context.Context) ([]payments.Invoice, error)
 	CountCompletedInvoices(ctx context.Context) (int64, error)
+}
+
+type IPeersStore interface {
+	GetPeersForUsers(ctx context.Context, userIDs []int64) (map[int64]peers.Peer, error)
 }

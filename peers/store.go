@@ -3,6 +3,7 @@ package peers
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -111,4 +112,44 @@ func (s *store) SetActive(ctx context.Context, userID int64) error {
 
 	_, err := s.db.UpdateOne(ctx, filter, update)
 	return err
+}
+
+func (s *store) SetImported(ctx context.Context, userID int64, val bool, importedAt time.Time) error {
+	filter := bson.M{"user_id": userID}
+	update := bson.M{"$set": bson.M{"is_imported": val, "imported_at": importedAt}}
+
+	_, err := s.db.UpdateOne(ctx, filter, update)
+	return err
+}
+
+func (s *store) GetPeersForUsers(ctx context.Context, userIDs []int64) (map[int64]Peer, error) {
+	if len(userIDs) == 0 {
+		return map[int64]Peer{}, nil
+	}
+
+	cur, err := s.db.Find(ctx, bson.M{
+		"user_id": bson.M{"$in": userIDs},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	defer cur.Close(ctx)
+
+	peers := make(map[int64]Peer)
+
+	for cur.Next(ctx) {
+		var p Peer
+		if err := cur.Decode(&p); err != nil {
+			return nil, err
+		}
+
+		peers[p.UserID] = p
+	}
+
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return peers, nil
 }

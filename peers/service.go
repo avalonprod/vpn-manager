@@ -15,6 +15,7 @@ type IStore interface {
 	UpdateSubs(ctx context.Context, id string, subs []Sub) error
 	GetActivePeerByUserID(ctx context.Context, userID int64) (Peer, error)
 	SetActive(ctx context.Context, userID int64) error
+	SetImported(ctx context.Context, userID int64, val bool, importedAt time.Time) error
 }
 
 type service struct {
@@ -35,11 +36,12 @@ func (s *service) Create(ctx context.Context, userID int64) (Peer, error) {
 			email := uuid[:7]
 
 			peer = Peer{
-				UserID:    userID,
-				Email:     email,
-				UUID:      uuid,
-				IsActive:  true,
-				CreatedAt: time.Now().UTC(),
+				UserID:     userID,
+				Email:      email,
+				UUID:       uuid,
+				IsActive:   true,
+				CreatedAt:  time.Now().UTC(),
+				IsImported: false,
 			}
 			id, err := s.store.Create(ctx, peer)
 			if err != nil {
@@ -88,4 +90,8 @@ func (s *service) GetByID(ctx context.Context, peerID string) (Peer, error) {
 
 func (s *service) DeletePeersByUserID(ctx context.Context, userID int64) error {
 	return s.store.DeletePeersByUserID(ctx, userID)
+}
+
+func (s *service) SetImported(ctx context.Context, userID int64) error {
+	return s.store.SetImported(ctx, userID, true, time.Now().UTC())
 }

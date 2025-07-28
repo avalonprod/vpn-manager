@@ -11,6 +11,7 @@ import (
 	"vpn-manager/analytics/sheets"
 	"vpn-manager/core/config"
 	"vpn-manager/payments"
+	"vpn-manager/peers"
 	"vpn-manager/pkg/db/mongodb"
 	"vpn-manager/pkg/logger"
 	"vpn-manager/subscriptions"
@@ -50,8 +51,9 @@ func main() {
 	usersStore := users.NewStore(mongodb)
 	subscriptionsStore := subscriptions.NewStore(mongodb)
 	paymentsStore := payments.NewStore(mongodb)
+	peersStore := peers.NewStore(mongodb)
 
-	exporter := analytics.NewExporter(exporterWriter, usersStore, subscriptionsStore, paymentsStore)
+	exporter := analytics.NewExporter(exporterWriter, usersStore, subscriptionsStore, paymentsStore, peersStore)
 	analytics := analytics.NewAnalytics(analyticsWriter, usersStore, subscriptionsStore, paymentsStore, logger)
 
 	go runDataExporter(ctx, exporter)
