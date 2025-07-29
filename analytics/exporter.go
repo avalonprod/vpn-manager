@@ -58,13 +58,13 @@ func (e *Exporter) ExportOverview(ctx context.Context) error {
 		rows = append(rows, []interface{}{
 			user.FirstName,
 			user.Username,
-			user.CreatedAt.Format("2006-01-02 15:04:05"),
+			user.CreatedAt.Format("2006-01-02"),
 			subscriptions[user.ID].PlanID,
 			subscriptions[user.ID].Active,
-			subscriptions[user.ID].ExpiresAt.Format("2006-01-02 15:04:05"),
-			subscriptions[user.ID].CreatedAt.Format("2006-01-02 15:04:05"),
+			subscriptions[user.ID].ExpiresAt.Format("2006-01-02"),
+			subscriptions[user.ID].CreatedAt.Format("2006-01-02"),
 			peers[user.ID].IsImported,
-			peers[user.ID].ImportedAt.Format("2006-01-02 15:04:05"),
+			peers[user.ID].ImportedAt.Format("2006-01-02"),
 		})
 	}
 
