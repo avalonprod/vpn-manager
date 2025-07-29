@@ -11,14 +11,13 @@ import (
 	"vpn-manager/api"
 	"vpn-manager/bot"
 	"vpn-manager/core/config"
-	"vpn-manager/notifier"
+	"vpn-manager/jobs"
 	"vpn-manager/payments"
 	"vpn-manager/peers"
 	"vpn-manager/pkg/db/mongodb"
 	"vpn-manager/pkg/logger"
 	"vpn-manager/pkg/server"
 	"vpn-manager/plans"
-	"vpn-manager/scheduler"
 	"vpn-manager/servers"
 	"vpn-manager/subscriptions"
 	"vpn-manager/users"
@@ -61,7 +60,7 @@ func main() {
 	mongodb := mongodbClient.Database(cfg.MongoDB.Name)
 	logger := logger.NewLogger()
 
-	notifier := notifier.NewNotifier(b)
+	// notifier := notifier.NewNotifier(b)
 	usersService := users.NewService(users.NewStore(mongodb))
 	peersService := peers.NewService(peers.NewStore(mongodb))
 	serversService := servers.NewService(servers.NewStore(mongodb), peersService, cfg.ServerPanelPassword, cfg.ApiUrl)
@@ -74,8 +73,6 @@ func main() {
 		})
 	subscriptionsService := subscriptions.NewService(subscriptions.NewStore(mongodb), plansService, paymentsService)
 
-	scheduler := scheduler.NewScheduler(subscriptionsService, peersService, serversService, notifier, logger)
-
 	stackStore := bot.NewStackScreens(mongodb)
 	bot := bot.NewBot(b, *stackStore, logger, usersService, serversService, peersService, plansService, subscriptionsService, cfg.ApiUrl)
 
@@ -85,7 +82,7 @@ func main() {
 		Port: cfg.Port,
 	}, handler.RegisterRoutes())
 
-	go runScheduler(ctx, scheduler)
+	go jobs.RunSubscriptionDeactivation(ctx, subscriptionsService)
 	go srv.Run()
 	go bot.Run()
 
@@ -103,18 +100,5 @@ func main() {
 
 	if err := mongodbClient.Disconnect(ctx); err != nil {
 		log.Printf("error disconnect to mongodbClient. err: %v", err)
-	}
-}
-
-func runScheduler(ctx context.Context, scheduler *scheduler.Scheduler) {
-	ticker := time.NewTicker(3 * time.Hour)
-	for {
-		select {
-		case <-ticker.C:
-			// scheduler.CheckExpiredSubscriptions(ctx)
-		case <-ctx.Done():
-			ticker.Stop()
-			return
-		}
 	}
 }

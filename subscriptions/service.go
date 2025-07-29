@@ -68,6 +68,7 @@ func (s *service) CreateOrExtend(ctx context.Context, userID int64, invoiceID st
 			PlanID:      plan.ID,
 			Active:      true,
 			AutoRenewal: true,
+			IsTrial:     false,
 			ExpiresAt:   time.Now().UTC().Add(time.Duration(plan.DurationDays) * 24 * time.Hour),
 			CreatedAt:   time.Now().UTC(),
 		}); err != nil {
@@ -78,6 +79,7 @@ func (s *service) CreateOrExtend(ctx context.Context, userID int64, invoiceID st
 			PlanID:      plan.ID,
 			Active:      true,
 			AutoRenewal: true,
+			IsTrial:     false,
 			ExpiresAt:   subscription.ExpiresAt.Add(time.Duration(plan.DurationDays) * 24 * time.Hour),
 		}); err != nil {
 			return err
@@ -104,6 +106,7 @@ func (s *service) CreateTrialSubscription(ctx context.Context, userID int64) err
 		PlanID:      "trial",
 		Active:      true,
 		AutoRenewal: false,
+		IsTrial:     true,
 		ExpiresAt:   time.Now().UTC().Add(3 * 24 * time.Hour),
 		CreatedAt:   time.Now().UTC(),
 	})

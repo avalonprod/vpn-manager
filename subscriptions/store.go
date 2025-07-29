@@ -67,7 +67,7 @@ func (s *store) GetExpiredSubscriptions(ctx context.Context) ([]Subscription, er
 
 func (s *store) DeactivateExpiredSubscriptions(ctx context.Context) error {
 	filter := bson.M{
-		"expires_at": bson.M{"$lt": time.Now()},
+		"expires_at": bson.M{"$lt": time.Now().UTC()},
 		"active":     true,
 	}
 	update := bson.M{
@@ -145,8 +145,29 @@ func (s *store) CancelSubscription(ctx context.Context, userID int64) error {
 
 func (s *store) GetAllTrialSubscriptions(ctx context.Context) ([]Subscription, error) {
 	cursor, err := s.db.Find(ctx, bson.M{
-		"plan_id": "trial",
+		"is_trial": true,
 	})
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var subscriptions []Subscription
+	if err := cursor.All(ctx, &subscriptions); err != nil {
+		return nil, err
+	}
+
+	return subscriptions, nil
+}
+
+func (s *store) GetExpiredTrialSubscriptions(ctx context.Context) ([]Subscription, error) {
+	filter := bson.M{
+		"is_trial":   true,
+		"expires_at": bson.M{"$lt": time.Now().UTC()},
+		"active":     true,
+	}
+
+	cursor, err := s.db.Find(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +214,7 @@ func (s *store) GetSubscriptionsForUsers(ctx context.Context, userIDs []int64) (
 }
 
 func (s *store) CountTrialSubscriptions(ctx context.Context) (int64, error) {
-	count, err := s.db.CountDocuments(ctx, bson.M{"plan_id": "trial"})
+	count, err := s.db.CountDocuments(ctx, bson.M{"is_trial": true})
 	if err != nil {
 		return 0, err
 	}
