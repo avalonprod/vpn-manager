@@ -60,7 +60,6 @@ func main() {
 	mongodb := mongodbClient.Database(cfg.MongoDB.Name)
 	logger := logger.NewLogger()
 
-	// notifier := notifier.NewNotifier(b)
 	usersService := users.NewService(users.NewStore(mongodb))
 	peersService := peers.NewService(peers.NewStore(mongodb))
 	serversService := servers.NewService(servers.NewStore(mongodb), peersService, cfg.ServerPanelPassword, cfg.ApiUrl)
@@ -82,7 +81,7 @@ func main() {
 		Port: cfg.Port,
 	}, handler.RegisterRoutes())
 
-	go jobs.RunSubscriptionDeactivation(ctx, subscriptionsService)
+	go jobs.RunSubscriptionDeactivation(ctx, subscriptionsService, bot)
 	go srv.Run()
 	go bot.Run()
 

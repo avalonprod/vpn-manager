@@ -21,6 +21,7 @@ const (
 	SuccessPaymentScreen         = "success_payment_screen"
 	SubscriptionManagementScreen = "subscription_management_screen"
 	CancelSubscriptionScreen     = "cancel_subscription_screen"
+	TrialPeriodExpiryScreen      = "trial_period_expiry_screen"
 )
 
 var store = map[int64][]telebot.StoredMessage{}
@@ -436,7 +437,6 @@ func (b *Bot) BuildCancelSubscriptionScreen(ctx context.Context, userID int64) (
 		telebot.Row{
 			b.navigateButtonTo("Возобновить подписку", SubscriptionsScreen),
 		},
-		telebot.Row{},
 		telebot.Row{
 			b.backButton(),
 		},
@@ -455,6 +455,31 @@ func (b *Bot) BuildCancelSubscriptionScreen(ctx context.Context, userID int64) (
 		Keyboard: keyword,
 		Context:  CancelSubscriptionScreen,
 	}, nil
+}
+
+func (b *Bot) BuildTrialPeriodExpiryScreen(ctx context.Context, userID int64) *Screen {
+	keyword := &telebot.ReplyMarkup{}
+
+	keyword.Inline(
+		telebot.Row{
+			b.navigateButtonTo("Продлить доступ", SubscriptionsScreen),
+		},
+		telebot.Row{
+			b.backButton(),
+		},
+	)
+
+	text := `
+🔔 Ну как вам? Тестовый период подошел концу. 
+
+Если все понравилось, вы можете продлить доступ и получить до полугода в подарок. ⬇️
+	`
+
+	return &Screen{
+		Text:     text,
+		Keyboard: keyword,
+		Context:  TrialPeriodExpiryScreen,
+	}
 }
 
 func (b *Bot) handleBack(c telebot.Context) error {

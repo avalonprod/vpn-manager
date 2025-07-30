@@ -162,6 +162,17 @@ func (b *Bot) SendPostImportInstructions(userID int64, os string) error {
 	return nil
 }
 
+func (b *Bot) SendTrialSubscriptionsExpiryReminder(userID int64) error {
+	user := &telebot.User{ID: userID}
+
+	screen := b.BuildTrialPeriodExpiryScreen(context.Background(), userID)
+	if err := b.SendMessage(user.ID, screen); err != nil {
+		b.logger.Error(err)
+		return err
+	}
+
+	return nil
+}
 func (b *Bot) SendSuccessPayment(userID int64) error {
 	user := &telebot.User{ID: userID}
 
