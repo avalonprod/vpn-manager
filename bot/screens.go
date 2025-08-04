@@ -92,7 +92,7 @@ func (b *Bot) BuildStartScreen(userID int64) *Screen {
 			b.navigateButtonTo("Попробовать бесплатно", TrialAccessScreen),
 		},
 		telebot.Row{
-			b.navigateButtonTo("Купить от 190р в месяц", SubscriptionsScreen),
+			b.navigateButtonTo("Купить от 150р в месяц", SubscriptionsScreen),
 		},
 		telebot.Row{
 			ofertaButton,
@@ -103,15 +103,9 @@ func (b *Bot) BuildStartScreen(userID int64) *Screen {
 	)
 
 	text := `
-🔥 <b>NeonGuard</b> — твой интернет без ограничений
+Нажмите «Попробовать бесплатно» и мы начнем настройку. 
 
-📡 Мгновенное подключение. Без логов. Без следов.
-
-🛫 Доступ к зарубежным сайтам и приложениям.
-
-🚀 Настройка занимает меньше минуты — всё готово.
-
-<b>NeonGuard</b> - Это быстрый, безопасный и простой способ подключиться к миру.	
+Займет меньше минуты. 
 	`
 
 	return &Screen{
