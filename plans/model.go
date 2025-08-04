@@ -10,5 +10,6 @@ type Plan struct {
 	Currency     string    `bson:"currency"`
 	DurationDays int       `bson:"duration_days"`
 	IsActive     bool      `bson:"is_active"`
+	Order        int       `bson:"order"`
 	CreatedAt    time.Time `bson:"created_at"`
 }

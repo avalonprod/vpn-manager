@@ -2,6 +2,7 @@ package plans
 
 import (
 	"context"
+	"sort"
 )
 
 type IStore interface {
@@ -20,7 +21,16 @@ func NewService(store IStore) *service {
 }
 
 func (s *service) GetAll(ctx context.Context) ([]Plan, error) {
-	return s.store.GetAll(ctx)
+	plans, err := s.store.GetAll(ctx)
+	if err != nil {
+		return []Plan{}, err
+	}
+
+	sort.Slice(plans, func(i, j int) bool {
+		return plans[i].Order < plans[j].Order
+	})
+
+	return plans, nil
 }
 
 func (s *service) GetByID(ctx context.Context, ID string) (Plan, error) {
