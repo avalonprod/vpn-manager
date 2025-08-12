@@ -29,7 +29,7 @@ func (r *Runner) Run(ctx context.Context, workers int) {
 	for i := 0; i < workers; i++ {
 
 		go func() {
-			ticker := time.NewTicker(2 * time.Second)
+			ticker := time.NewTicker(3 * time.Minute)
 			defer ticker.Stop()
 			for {
 				select {
