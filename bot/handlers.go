@@ -2,6 +2,9 @@ package bot
 
 import (
 	"context"
+	"fmt"
+	"time"
+	"vpn-manager/tasks"
 	"vpn-manager/users"
 
 	"gopkg.in/telebot.v4"
@@ -28,6 +31,15 @@ func (b *Bot) handleStart(c telebot.Context) error {
 		b.logger.Error(err)
 		return err
 	}
+
+	_ = b.tasksService.Enqueue(context.Background(), tasks.Task{
+		Type:        "trial_nudge",
+		UserID:      user.ID,
+		RunAt:       time.Now().UTC().Add(30 * time.Minute),
+		MaxAttempts: 10,
+		DedupeKey:   fmt.Sprintf("trial_nudge:%d", user.ID),
+	})
+
 	return nil
 }
 
@@ -173,6 +185,19 @@ func (b *Bot) SendTrialSubscriptionsExpiryReminder(userID int64) error {
 
 	return nil
 }
+
+func (b *Bot) SendTrialNudge(userID int64) error {
+	user := &telebot.User{ID: userID}
+
+	screen := b.BuildTrialNudgeScreen(userID)
+	if err := b.SendMessage(user.ID, screen); err != nil {
+		b.logger.Error(err)
+		return err
+	}
+
+	return nil
+}
+
 func (b *Bot) SendSuccessPayment(userID int64) error {
 	user := &telebot.User{ID: userID}
 

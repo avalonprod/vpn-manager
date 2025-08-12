@@ -5,6 +5,7 @@ import (
 	"vpn-manager/pkg/logger"
 	"vpn-manager/plans"
 	"vpn-manager/subscriptions"
+	"vpn-manager/tasks"
 	"vpn-manager/users"
 
 	"gopkg.in/telebot.v4"
@@ -12,6 +13,10 @@ import (
 
 type IUsersService interface {
 	Register(ctx context.Context, input users.CreateUserInput) error
+}
+
+type ITasksService interface {
+	Enqueue(ctx context.Context, task tasks.Task) error
 }
 
 type ISubscriptionsService interface {
@@ -42,6 +47,7 @@ type Bot struct {
 	peersService         IPeersService
 	plansService         IPlansService
 	subscriptionsService ISubscriptionsService
+	tasksService         ITasksService
 	apiUrl               string
 }
 
@@ -54,6 +60,7 @@ func NewBot(
 	peersService IPeersService,
 	plansService IPlansService,
 	subscriptionsService ISubscriptionsService,
+	tasksService ITasksService,
 	apiUrl string,
 ) *Bot {
 	return &Bot{
@@ -65,6 +72,7 @@ func NewBot(
 		peersService:         peersService,
 		plansService:         plansService,
 		subscriptionsService: subscriptionsService,
+		tasksService:         tasksService,
 		apiUrl:               apiUrl,
 	}
 }

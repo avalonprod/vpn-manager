@@ -20,6 +20,7 @@ import (
 	"vpn-manager/plans"
 	"vpn-manager/servers"
 	"vpn-manager/subscriptions"
+	"vpn-manager/tasks"
 	"vpn-manager/users"
 
 	"gopkg.in/telebot.v4"
@@ -71,15 +72,37 @@ func main() {
 			ApiUrl:    cfg.CloudPayments.ApiUrl,
 		})
 	subscriptionsService := subscriptions.NewService(subscriptions.NewStore(mongodb), plansService, paymentsService)
-
+	tasksService := tasks.NewService(tasks.NewStore(mongodb))
 	stackStore := bot.NewStackScreens(mongodb)
-	bot := bot.NewBot(b, *stackStore, logger, usersService, serversService, peersService, plansService, subscriptionsService, cfg.ApiUrl)
+	bot := bot.NewBot(b, *stackStore, logger, usersService, serversService, peersService, plansService, subscriptionsService, tasksService, cfg.ApiUrl)
 
 	handler := api.NewHandler(peersService, plansService, paymentsService, subscriptionsService, cfg.CloudPayments.SecretKey, bot, logger, cfg.ApiUrl, cfg.Apps)
 
 	srv := server.NewServer(&server.HttpConfig{
 		Port: cfg.Port,
 	}, handler.RegisterRoutes())
+
+	// Tasks ===============================
+	var trialNudgeHandler = func(ctx context.Context, t tasks.Task) error {
+		sub, err := subscriptionsService.GetByUserID(ctx, t.UserID)
+		if err == nil && sub.ID != "" {
+			return tasksService.MarkDone(ctx, t.ID)
+		}
+
+		if err := bot.SendTrialNudge(t.UserID); err != nil {
+			return err
+		}
+
+		err = tasksService.Reschedule(ctx, t.ID, time.Now().UTC().Add(24*time.Hour))
+
+		return err
+	}
+	runner := tasks.NewRunner(tasksService, map[string]tasks.Handler{
+		"trial_nudge": trialNudgeHandler,
+	})
+
+	go runner.Run(ctx, 1)
+	// ===============================
 
 	go jobs.RunSubscriptionDeactivation(ctx, subscriptionsService, bot)
 	go srv.Run()

@@ -22,6 +22,7 @@ const (
 	SubscriptionManagementScreen = "subscription_management_screen"
 	CancelSubscriptionScreen     = "cancel_subscription_screen"
 	TrialPeriodExpiryScreen      = "trial_period_expiry_screen"
+	TrialNudgeScreen             = "trial_nudge_screen"
 )
 
 var store = map[int64][]telebot.StoredMessage{}
@@ -449,6 +450,28 @@ func (b *Bot) BuildCancelSubscriptionScreen(ctx context.Context, userID int64) (
 		Keyboard: keyword,
 		Context:  CancelSubscriptionScreen,
 	}, nil
+}
+
+func (b *Bot) BuildTrialNudgeScreen(userID int64) *Screen {
+	keyword := &telebot.ReplyMarkup{}
+
+	keyword.Inline(
+		telebot.Row{
+			b.navigateButtonTo("Попробовать бесплатно", TrialAccessScreen),
+		},
+	)
+
+	text := `
+🔔 Не забыли, что у вас есть бесплатный доступ?
+
+Нажмите кнопку «Попробовать бесплатно» и начните пользоваться свободным интернетом уже сейчас.
+	`
+
+	return &Screen{
+		Text:     text,
+		Keyboard: keyword,
+		Context:  TrialNudgeScreen,
+	}
 }
 
 func (b *Bot) BuildTrialPeriodExpiryScreen(ctx context.Context, userID int64) *Screen {
