@@ -198,6 +198,18 @@ func (b *Bot) SendTrialNudge(userID int64) error {
 	return nil
 }
 
+func (b *Bot) SendSetupNudge(userID int64, os string) error {
+	user := &telebot.User{ID: userID}
+
+	screen := b.BuildSetupScreen(userID, os)
+	if err := b.SendMessage(user.ID, screen); err != nil {
+		b.logger.Error(err)
+		return err
+	}
+
+	return nil
+}
+
 func (b *Bot) SendSuccessPayment(userID int64) error {
 	user := &telebot.User{ID: userID}
 

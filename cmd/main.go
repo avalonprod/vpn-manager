@@ -76,7 +76,7 @@ func main() {
 	stackStore := bot.NewStackScreens(mongodb)
 	bot := bot.NewBot(b, *stackStore, logger, usersService, serversService, peersService, plansService, subscriptionsService, tasksService, cfg.ApiUrl)
 
-	handler := api.NewHandler(peersService, plansService, paymentsService, subscriptionsService, cfg.CloudPayments.SecretKey, bot, logger, cfg.ApiUrl, cfg.Apps)
+	handler := api.NewHandler(peersService, plansService, paymentsService, subscriptionsService, tasksService, cfg.CloudPayments.SecretKey, bot, logger, cfg.ApiUrl, cfg.Apps)
 
 	srv := server.NewServer(&server.HttpConfig{
 		Port: cfg.Port,
@@ -97,8 +97,28 @@ func main() {
 
 		return err
 	}
+
+	var setupNudgeHandler = func(ctx context.Context, t tasks.Task) error {
+		peer, err := peersService.GetPeerByUserID(ctx, t.UserID)
+		if err != nil {
+			return err
+		}
+
+		if peer.IsImported {
+			return tasksService.MarkDone(ctx, t.ID)
+		}
+
+		if err := bot.SendSetupNudge(t.UserID, string(t.Payload)); err != nil {
+			return err
+		}
+
+		err = tasksService.Reschedule(ctx, t.ID, time.Now().UTC().Add(24*time.Hour))
+
+		return err
+	}
 	runner := tasks.NewRunner(tasksService, map[string]tasks.Handler{
 		"trial_nudge": trialNudgeHandler,
+		"setup_nudge": setupNudgeHandler,
 	})
 
 	go runner.Run(ctx, 1)

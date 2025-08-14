@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 	"vpn-manager/core/config"
 	"vpn-manager/payments"
 	"vpn-manager/peers"
 	"vpn-manager/pkg/logger"
 	"vpn-manager/plans"
+	"vpn-manager/tasks"
 
 	"github.com/gorilla/mux"
 )
@@ -35,6 +37,10 @@ type ISubscriptionsService interface {
 	IsSubscriptionActive(ctx context.Context, userID int64) (bool, error)
 }
 
+type ITasksService interface {
+	Enqueue(ctx context.Context, task tasks.Task) error
+}
+
 type IBot interface {
 	SendSetupInstruction(userID int64, os string) error
 	SendPostImportInstructions(userID int64, os string) error
@@ -46,6 +52,7 @@ type Handler struct {
 	plansService         IPlansService
 	paymentsService      IPaymentsService
 	subscriptionsService ISubscriptionsService
+	tasksService         ITasksService
 	bot                  IBot
 	logger               logger.ILogger
 	apiUrl               string
@@ -53,13 +60,14 @@ type Handler struct {
 	apps                 config.Apps
 }
 
-func NewHandler(peersService IPeersService, plansService IPlansService, paymentsService IPaymentsService, subscriptionsService ISubscriptionsService, cloudPaymentsSecret string, bot IBot, logger logger.ILogger, apiUrl string, apps config.Apps) *Handler {
+func NewHandler(peersService IPeersService, plansService IPlansService, paymentsService IPaymentsService, subscriptionsService ISubscriptionsService, tasksService ITasksService, cloudPaymentsSecret string, bot IBot, logger logger.ILogger, apiUrl string, apps config.Apps) *Handler {
 	return &Handler{
 		peersService:         peersService,
 		plansService:         plansService,
 		paymentsService:      paymentsService,
 		subscriptionsService: subscriptionsService,
 		cloudPaymentsSecret:  cloudPaymentsSecret,
+		tasksService:         tasksService,
 		bot:                  bot,
 		logger:               logger,
 		apiUrl:               apiUrl,
@@ -95,6 +103,19 @@ func (h *Handler) downloadApp(w http.ResponseWriter, r *http.Request) {
 	if err := h.bot.SendSetupInstruction(userID, query.Get("os")); err != nil {
 		h.logger.Errorf("%s: failed to send setup instruction for user_id: %v error: %w", op, userID, err)
 		http.Error(w, "Failed to send setup instructions", http.StatusInternalServerError)
+		return
+	}
+
+	if err := h.tasksService.Enqueue(r.Context(), tasks.Task{
+		Type:        "setup_nudge",
+		UserID:      userID,
+		Payload:     []byte(query.Get("os")),
+		RunAt:       time.Now().UTC().Add(5 * time.Minute),
+		MaxAttempts: 10,
+		DedupeKey:   fmt.Sprintf("setup_nudge:%d", userID),
+	}); err != nil {
+		h.logger.Errorf("%s: failed to send setup instruction for user_id: %v error: %w", op, userID, err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
