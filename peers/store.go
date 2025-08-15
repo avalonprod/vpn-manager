@@ -114,6 +114,14 @@ func (s *store) SetActive(ctx context.Context, userID int64) error {
 	return err
 }
 
+func (s *store) Deactivate(ctx context.Context, userID int64) error {
+	filter := bson.M{"user_id": userID}
+	update := bson.M{"$set": bson.M{"is_active": false}}
+
+	_, err := s.db.UpdateOne(ctx, filter, update)
+	return err
+}
+
 func (s *store) SetImported(ctx context.Context, userID int64, val bool, importedAt time.Time) error {
 	filter := bson.M{"user_id": userID}
 	update := bson.M{"$set": bson.M{"is_imported": val, "imported_at": importedAt}}

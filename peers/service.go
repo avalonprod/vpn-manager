@@ -15,6 +15,7 @@ type IStore interface {
 	UpdateSubs(ctx context.Context, id string, subs []Sub) error
 	GetActivePeerByUserID(ctx context.Context, userID int64) (Peer, error)
 	SetActive(ctx context.Context, userID int64) error
+	Deactivate(ctx context.Context, userID int64) error
 	SetImported(ctx context.Context, userID int64, val bool, importedAt time.Time) error
 }
 
@@ -82,6 +83,10 @@ func (s *service) GetActivePeerByUserID(ctx context.Context, userID int64) (Peer
 
 func (s *service) ActivatePeer(ctx context.Context, userID int64) error {
 	return s.store.SetActive(ctx, userID)
+}
+
+func (s *service) DeactivatePeer(ctx context.Context, userID int64) error {
+	return s.store.Deactivate(ctx, userID)
 }
 
 func (s *service) GetByID(ctx context.Context, peerID string) (Peer, error) {

@@ -2,8 +2,8 @@ package jobs
 
 import (
 	"context"
-	"log"
 	"time"
+	"vpn-manager/pkg/logger"
 	"vpn-manager/subscriptions"
 )
 
@@ -12,30 +12,58 @@ type ISubscriptionsService interface {
 	DeactivateExpiredSubscriptions(ctx context.Context) error
 }
 
-func RunSubscriptionDeactivation(ctx context.Context, subscriptionsService ISubscriptionsService, bot IBot) {
-	ticker := time.NewTicker(3 * time.Hour)
+func RunDisableExpiredAccess(
+	ctx context.Context,
+	subs ISubscriptionsService,
+	peers IPeersService,
+	servers IServersService,
+	bot IBot,
+	log logger.ILogger,
+) {
+	ticker := time.NewTicker(3 * time.Minute)
+
 	for {
-		select {
-		case <-ticker.C:
-			subscriptions, err := subscriptionsService.GetExpiredSubscriptions(ctx)
+		run := func() {
+			expired, err := subs.GetExpiredSubscriptions(ctx)
 			if err != nil {
-				log.Printf("error getting expired subscriptions: %v", err)
-				continue
+				log.Errorf("get expired subs: %v", err)
+				return
 			}
-			for _, subscription := range subscriptions {
-				if subscription.IsTrial {
-					err := bot.SendTrialSubscriptionsExpiryReminder(subscription.UserID)
+
+			for _, s := range expired {
+				if s.IsTrial {
+					err := bot.SendTrialSubscriptionsExpiryReminder(s.UserID)
 					if err != nil {
-						log.Printf("error sending trial subscription expiry reminder to user %d: %v", subscription.UserID, err)
+						log.Errorf("error sending trial subscription expiry reminder to user %d: %v", s.UserID, err)
 						continue
 					}
 				}
+
+				peer, err := peers.GetPeerByUserID(ctx, s.UserID)
+				if err != nil {
+					log.Errorf("get peer by user %d: %v", s.UserID, err)
+					continue
+				}
+
+				for _, sub := range peer.Subs {
+					if err := servers.DeletePeerFromServer(ctx, sub.ServerID, peer.UUID); err != nil {
+						log.Errorf("remove client on server %s for user %d: %v", sub.ServerID, s.UserID, err)
+					}
+				}
+
+				if err := peers.DeactivatePeer(ctx, s.UserID); err != nil {
+					log.Errorf("deactivate peers for user %d: %v", s.UserID, err)
+				}
 			}
 
-			if err := subscriptionsService.DeactivateExpiredSubscriptions(ctx); err != nil {
-				log.Printf("error deactivating expired subscriptions: %v", err)
-				continue
+			if err := subs.DeactivateExpiredSubscriptions(ctx); err != nil {
+				log.Errorf("deactivate expired subs: %v", err)
 			}
+		}
+
+		select {
+		case <-ticker.C:
+			run()
 		case <-ctx.Done():
 			ticker.Stop()
 			return

@@ -124,7 +124,7 @@ func main() {
 	go runner.Run(ctx, 1)
 	// ===============================
 
-	go jobs.RunSubscriptionDeactivation(ctx, subscriptionsService, bot)
+	go jobs.RunDisableExpiredAccess(ctx, subscriptionsService, peersService, serversService, bot, logger)
 	go srv.Run()
 	go bot.Run()
 
