@@ -3,9 +3,11 @@ package subscriptions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 	"vpn-manager/payments"
 	"vpn-manager/plans"
+	"vpn-manager/tasks"
 )
 
 type IStore interface {
@@ -17,6 +19,10 @@ type IStore interface {
 	DeactivateSubscription(ctx context.Context, userID int64, ID string) error
 	CancelSubscription(ctx context.Context, userID int64) error
 	GetAllTrialSubscriptions(ctx context.Context) ([]Subscription, error)
+}
+
+type ITasksService interface {
+	Enqueue(ctx context.Context, task tasks.Task) error
 }
 
 type IPlansService interface {
@@ -32,13 +38,15 @@ type service struct {
 	store           IStore
 	plansService    IPlansService
 	paymentsService IPaymentsService
+	tasksService    ITasksService
 }
 
-func NewService(store IStore, plansService IPlansService, paymentsService IPaymentsService) *service {
+func NewService(store IStore, plansService IPlansService, paymentsService IPaymentsService, tasksService ITasksService) *service {
 	return &service{
 		store:           store,
 		plansService:    plansService,
 		paymentsService: paymentsService,
+		tasksService:    tasksService,
 	}
 }
 
@@ -84,6 +92,16 @@ func (s *service) CreateOrExtend(ctx context.Context, userID int64, invoiceID st
 		}); err != nil {
 			return err
 		}
+	}
+
+	if err = s.tasksService.Enqueue(context.Background(), tasks.Task{
+		Type:        "renew_subscription",
+		UserID:      userID,
+		RunAt:       time.Now().UTC().Add(1 * time.Second),
+		MaxAttempts: 1,
+		DedupeKey:   fmt.Sprintf("renew_subscription:%d", userID),
+	}); err != nil {
+		return err
 	}
 
 	err = s.paymentsService.SetStatus(ctx, userID, invoiceID, payments.StatusCompleted)

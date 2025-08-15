@@ -71,8 +71,8 @@ func main() {
 			SecretKey: cfg.CloudPayments.SecretKey,
 			ApiUrl:    cfg.CloudPayments.ApiUrl,
 		})
-	subscriptionsService := subscriptions.NewService(subscriptions.NewStore(mongodb), plansService, paymentsService)
 	tasksService := tasks.NewService(tasks.NewStore(mongodb))
+	subscriptionsService := subscriptions.NewService(subscriptions.NewStore(mongodb), plansService, paymentsService, tasksService)
 	stackStore := bot.NewStackScreens(mongodb)
 	bot := bot.NewBot(b, *stackStore, logger, usersService, serversService, peersService, plansService, subscriptionsService, tasksService, cfg.ApiUrl)
 
@@ -98,6 +98,21 @@ func main() {
 		return err
 	}
 
+	var renewSubscription = func(ctx context.Context, t tasks.Task) error {
+		sub, err := subscriptionsService.GetByUserID(ctx, t.UserID)
+		if err != nil && !sub.Active {
+			return err
+		}
+
+		if err := serversService.RegisterNewPeers(context.Background(), t.UserID); err != nil {
+			return tasksService.Reschedule(ctx, t.ID, time.Now().UTC().Add(1*time.Minute))
+		}
+
+		err = peersService.ActivatePeer(ctx, t.UserID)
+
+		return err
+	}
+
 	var setupNudgeHandler = func(ctx context.Context, t tasks.Task) error {
 		peer, err := peersService.GetPeerByUserID(ctx, t.UserID)
 		if err != nil {
@@ -117,8 +132,9 @@ func main() {
 		return err
 	}
 	runner := tasks.NewRunner(tasksService, map[string]tasks.Handler{
-		"trial_nudge": trialNudgeHandler,
-		"setup_nudge": setupNudgeHandler,
+		"trial_nudge":        trialNudgeHandler,
+		"setup_nudge":        setupNudgeHandler,
+		"renew_subscription": renewSubscription,
 	})
 
 	go runner.Run(ctx, 1)
