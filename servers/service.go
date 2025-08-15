@@ -160,7 +160,6 @@ func (s *service) DeletePeerFromServer(ctx context.Context, serverID, UUID strin
 	}
 	defer resp.Body.Close()
 
-	fmt.Println(resp.StatusCode)
 	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotFound {
 		return nil
 	}
