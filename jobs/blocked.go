@@ -60,6 +60,12 @@ func reconcileBlocked(
 				continue
 			}
 
+			if peer.IsActive {
+				if err := peersService.DeactivatePeer(ctx, user.ID); err != nil {
+					log.Errorf("reconcile: deactivate peer of blocked user %d: %v", user.ID, err)
+				}
+			}
+
 			result, err := serversService.RevokeAccessEverywhere(ctx, peer.Email)
 			if err != nil {
 				log.Errorf("reconcile: revoke access for blocked user %d: %v", user.ID, err)
@@ -68,12 +74,6 @@ func reconcileBlocked(
 
 			if len(result.Failed) > 0 {
 				log.Errorf("reconcile: access of blocked user %d is still live on: %v", user.ID, result.Failed)
-			}
-
-			if peer.IsActive {
-				if err := peersService.DeactivatePeer(ctx, user.ID); err != nil {
-					log.Errorf("reconcile: deactivate peer of blocked user %d: %v", user.ID, err)
-				}
 			}
 		}
 

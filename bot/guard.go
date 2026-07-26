@@ -6,6 +6,16 @@ import (
 	"gopkg.in/telebot.v4"
 )
 
+func (b *Bot) accessToken(userID int64) string {
+	token, err := b.peersService.EnsureAccessToken(context.Background(), userID)
+	if err != nil {
+		b.logger.Errorf("bot: failed to resolve access token for user %d: %v", userID, err)
+		return ""
+	}
+
+	return token
+}
+
 func (b *Bot) blockGuard(next telebot.HandlerFunc) telebot.HandlerFunc {
 	return func(c telebot.Context) error {
 		sender := c.Sender()

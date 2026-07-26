@@ -155,11 +155,11 @@ func (b *Bot) BuildAppsListScreen(userID int64) *Screen {
 
 	keyword.Inline(
 		telebot.Row{
-			{Text: "💻 MacOs", URL: fmt.Sprintf("%s/apps?user_id=%d&os=macos", b.apiUrl, userID)},
+			{Text: "💻 MacOs", URL: fmt.Sprintf("%s/apps?token=%s&os=macos", b.apiUrl, b.accessToken(userID))},
 		},
 		telebot.Row{
-			{Text: "📱 iPhone / iPad", URL: fmt.Sprintf("%s/apps?user_id=%d&os=ios", b.apiUrl, userID)},
-			{Text: "📱 Android", URL: fmt.Sprintf("%s/apps?user_id=%d&os=android", b.apiUrl, userID)},
+			{Text: "📱 iPhone / iPad", URL: fmt.Sprintf("%s/apps?token=%s&os=ios", b.apiUrl, b.accessToken(userID))},
+			{Text: "📱 Android", URL: fmt.Sprintf("%s/apps?token=%s&os=android", b.apiUrl, b.accessToken(userID))},
 		},
 		telebot.Row{
 			b.backButton(),
@@ -193,7 +193,7 @@ func (b *Bot) BuildSubscriptionsScreen(ctx context.Context, userID int64, args .
 		row := telebot.Row{
 			{
 				Text: plan.Title,
-				URL:  fmt.Sprintf(`%s/subscribe?plan=%s&user_id=%d`, b.apiUrl, plan.ID, userID),
+				URL:  fmt.Sprintf(`%s/subscribe?plan=%s&token=%s`, b.apiUrl, plan.ID, b.accessToken(userID)),
 			},
 		}
 		rows = append(rows, row)
@@ -263,7 +263,7 @@ func (b *Bot) BuildSetupScreen(userID int64, os string) *Screen {
 
 	keyword.Inline(
 		telebot.Row{
-			{Text: "Автонастройка", URL: fmt.Sprintf("%s/setup?user_id=%d&os=%s", b.apiUrl, userID, os)},
+			{Text: "Автонастройка", URL: fmt.Sprintf("%s/setup?token=%s&os=%s", b.apiUrl, b.accessToken(userID), os)},
 		},
 		telebot.Row{
 			b.backButton(),
@@ -321,7 +321,7 @@ func (b *Bot) BuildManualSetupScreen(userID int64, os string) *Screen {
 		},
 	)
 
-	url := fmt.Sprintf("%s/subs?user_id=%d&name=%s", b.apiUrl, userID, "NeonGuard")
+	url := fmt.Sprintf("%s/subs?token=%s&name=%s", b.apiUrl, b.accessToken(userID), "NeonGuard")
 
 	text := fmt.Sprintf(`
 Ручная настройка очень простая и займет меньше минуты:

@@ -32,6 +32,7 @@ type IServersService interface {
 
 type IPeersService interface {
 	ActivatePeer(ctx context.Context, userID int64) error
+	EnsureAccessToken(ctx context.Context, userID int64) (string, error)
 }
 
 type IPlansService interface {

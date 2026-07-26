@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ import (
 
 type IPeersService interface {
 	GetActivePeerByUserID(ctx context.Context, userID int64) (peers.Peer, error)
+	GetByAccessToken(ctx context.Context, token string) (peers.Peer, error)
 	SetImported(ctx context.Context, userID int64) error
 }
 
@@ -68,6 +70,7 @@ type Handler struct {
 	cloudPaymentsSecret  string
 	apps                 config.Apps
 	admin                AdminRoutes
+	allowLegacyLinks     bool
 }
 
 type Deps struct {
@@ -83,7 +86,8 @@ type Deps struct {
 	CloudPayments string
 	Apps          config.Apps
 
-	Admin AdminRoutes
+	Admin            AdminRoutes
+	AllowLegacyLinks bool
 }
 
 func NewHandler(deps Deps) *Handler {
@@ -100,6 +104,7 @@ func NewHandler(deps Deps) *Handler {
 		apiUrl:               deps.ApiUrl,
 		apps:                 deps.Apps,
 		admin:                deps.Admin,
+		allowLegacyLinks:     deps.AllowLegacyLinks,
 	}
 }
 
@@ -125,10 +130,10 @@ func (h *Handler) downloadApp(w http.ResponseWriter, r *http.Request) {
 
 	query := r.URL.Query()
 
-	userID, err := strconv.ParseInt(query.Get("user_id"), 10, 64)
-	if err != nil {
-		h.logger.Warnf("%s: invalid user_id: %v error: %w", op, userID, err)
-		http.Error(w, "invalid user_id", http.StatusBadRequest)
+	userID, ok := userIDFrom(r.Context())
+	if !ok {
+		h.logger.Warnf("%s: request without an identified user", op)
+		http.Error(w, "invalid link", http.StatusNotFound)
 		return
 	}
 
@@ -164,15 +169,25 @@ func (h *Handler) downloadApp(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, appUrl, http.StatusTemporaryRedirect)
 }
 
+func (h *Handler) subscriptionURL(r *http.Request) string {
+	query := r.URL.Query()
+
+	if token := query.Get("token"); token != "" {
+		return fmt.Sprintf("%s/subs?token=%s&name=NeonGuard", h.apiUrl, url.QueryEscape(token))
+	}
+
+	return fmt.Sprintf("%s/subs?user_id=%s&name=NeonGuard", h.apiUrl, url.QueryEscape(query.Get("user_id")))
+}
+
 func (h *Handler) setup(w http.ResponseWriter, r *http.Request) {
 	const op = "setup"
 
 	query := r.URL.Query()
 
-	userID, err := strconv.ParseInt(query.Get("user_id"), 10, 64)
-	if err != nil {
-		h.logger.Warnf("%s: invalid user_id: %v error: %w", op, userID, err)
-		http.Error(w, "invalid user_id", http.StatusBadRequest)
+	userID, ok := userIDFrom(r.Context())
+	if !ok {
+		h.logger.Warnf("%s: request without an identified user", op)
+		http.Error(w, "invalid link", http.StatusNotFound)
 		return
 	}
 
@@ -182,15 +197,15 @@ func (h *Handler) setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	subsURL := h.subscriptionURL(r)
+
 	var deep string
 
 	switch query.Get("os") {
-	case "ios":
-		deep = fmt.Sprintf("streisand://import/%s/subs?user_id=%d&name=%s", h.apiUrl, userID, "NeonGuard")
-	case "macos":
-		deep = fmt.Sprintf("streisand://import/%s/subs?user_id=%d&name=%s", h.apiUrl, userID, "NeonGuard")
+	case "ios", "macos":
+		deep = fmt.Sprintf("streisand://import/%s", subsURL)
 	case "android":
-		deep = fmt.Sprintf("v2raytun://import/%s/subs?user_id=%d&name=%s", h.apiUrl, userID, "NeonGuard")
+		deep = fmt.Sprintf("v2raytun://import/%s", subsURL)
 	}
 
 	http.Redirect(w, r, deep, http.StatusTemporaryRedirect)
@@ -198,12 +213,11 @@ func (h *Handler) setup(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) getSubs(w http.ResponseWriter, r *http.Request) {
 	const op = "getSubs"
-	query := r.URL.Query()
 
-	userID, err := strconv.ParseInt(query.Get("user_id"), 10, 64)
-	if err != nil {
-		h.logger.Warnf("%s: invalid user_id: %v error: %w", op, userID, err)
-		http.Error(w, "invalid user_id", http.StatusBadRequest)
+	userID, ok := userIDFrom(r.Context())
+	if !ok {
+		h.logger.Warnf("%s: request without an identified user", op)
+		http.Error(w, "invalid link", http.StatusNotFound)
 		return
 	}
 
@@ -306,10 +320,10 @@ func (h *Handler) handleSubscribe(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 
 	planID := query.Get("plan")
-	userID, err := strconv.ParseInt(query.Get("user_id"), 10, 64)
-	if err != nil {
-		h.logger.Warnf("%s: invalid user_id: %v error: %w", op, userID, err)
-		http.Error(w, "invalid user_id", http.StatusBadRequest)
+	userID, ok := userIDFrom(r.Context())
+	if !ok {
+		h.logger.Warnf("%s: request without an identified user", op)
+		http.Error(w, "invalid link", http.StatusNotFound)
 		return
 	}
 

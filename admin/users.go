@@ -356,6 +356,12 @@ func (h *Handler) revokeAccess(ctx context.Context, userID int64) (revoked int, 
 		return 0, failed
 	}
 
+	defer func() {
+		if err := h.peersService.DeactivatePeer(ctx, userID); err != nil {
+			h.logger.Errorf("admin: failed to deactivate peer for user %d: %v", userID, err)
+		}
+	}()
+
 	result, err := h.serversService.RevokeAccessEverywhere(ctx, peer.Email)
 	if err != nil {
 		h.logger.Errorf("admin: failed to revoke access for user %d: %v", userID, err)
@@ -363,10 +369,6 @@ func (h *Handler) revokeAccess(ctx context.Context, userID int64) (revoked int, 
 	}
 
 	revoked, failed = result.Revoked, result.Failed
-
-	if err := h.peersService.DeactivatePeer(ctx, userID); err != nil {
-		h.logger.Errorf("admin: failed to deactivate peer for user %d: %v", userID, err)
-	}
 
 	return revoked, failed
 }

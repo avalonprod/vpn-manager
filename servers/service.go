@@ -161,8 +161,11 @@ func (s *service) RegisterNewPeers(ctx context.Context, userID int64) error {
 		authorize(req, server)
 
 		if err := callPanel(&client, req, server); err != nil {
-			log.Printf("error registering new peer: %v", err)
-			continue
+			var rejection *PanelRejection
+			if !errors.As(err, &rejection) || !clientAlreadyRegistered(rejection.Msg) {
+				log.Printf("error registering new peer: %v", err)
+				continue
+			}
 		}
 
 		sub := fmt.Sprintf("vless://%s@%s:%d?security=reality&encryption=none&sni=%s&pbk=%s&sid=%s#%s", peer.UUID, server.Ip, server.Port, url.QueryEscape(server.Security.SNI), server.Security.PublicKey, server.Security.ShortID, server.Location)
@@ -437,8 +440,24 @@ func (s *service) deleteClient(ctx context.Context, server Server, email string)
 	return err
 }
 
+func clientAlreadyRegistered(panelMsg string) bool {
+	msg := strings.ToLower(panelMsg)
+
+	if !strings.Contains(msg, "client") && !strings.Contains(msg, "email") {
+		return false
+	}
+
+	return strings.Contains(msg, "already in use") ||
+		strings.Contains(msg, "already exists") ||
+		strings.Contains(msg, "duplicate")
+}
+
 func clientAlreadyGone(panelMsg string) bool {
 	msg := strings.ToLower(panelMsg)
+
+	if !strings.Contains(msg, "client") && !strings.Contains(msg, "email") {
+		return false
+	}
 
 	return strings.Contains(msg, "not found") ||
 		strings.Contains(msg, "no such") ||

@@ -70,6 +70,11 @@ func main() {
 
 	usersService := users.NewService(users.NewStore(mongodb))
 	peersService := peers.NewService(peers.NewStore(mongodb))
+
+	if err := peersService.EnsureAccessTokenIndex(ctx); err != nil {
+		log.Fatalf("failed to create the peers access_token index: %v", err)
+	}
+
 	serversService := servers.NewService(servers.NewStore(mongodb, tokenCipher), peersService, usersService, cfg.ApiUrl)
 	plansService := plans.NewService(plans.NewStore(mongodb))
 	paymentsService := payments.NewService(payments.NewStore(mongodb), plansService,
@@ -100,18 +105,19 @@ func main() {
 	}
 
 	handler := api.NewHandler(api.Deps{
-		Peers:         peersService,
-		Plans:         plansService,
-		Payments:      paymentsService,
-		Subscriptions: subscriptionsService,
-		Users:         usersService,
-		Tasks:         tasksService,
-		Bot:           bot,
-		Logger:        logger,
-		ApiUrl:        cfg.ApiUrl,
-		CloudPayments: cfg.CloudPayments.SecretKey,
-		Apps:          cfg.Apps,
-		Admin:         adminHandler,
+		Peers:            peersService,
+		Plans:            plansService,
+		Payments:         paymentsService,
+		Subscriptions:    subscriptionsService,
+		Users:            usersService,
+		Tasks:            tasksService,
+		Bot:              bot,
+		Logger:           logger,
+		ApiUrl:           cfg.ApiUrl,
+		CloudPayments:    cfg.CloudPayments.SecretKey,
+		Apps:             cfg.Apps,
+		Admin:            adminHandler,
+		AllowLegacyLinks: cfg.AllowLegacySubLinks,
 	})
 
 	srv := server.NewServer(&server.HttpConfig{

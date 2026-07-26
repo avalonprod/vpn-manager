@@ -3,6 +3,7 @@ package servers
 import (
 	"context"
 	"fmt"
+	"log"
 	"vpn-manager/pkg/secret"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -60,7 +61,8 @@ func (s *store) find(ctx context.Context, filter bson.M) ([]Server, error) {
 
 	for i := range servers {
 		if err := s.decodeToken(&servers[i]); err != nil {
-			return nil, err
+			log.Printf("servers: %v", err)
+			servers[i].AuthToken = ""
 		}
 	}
 

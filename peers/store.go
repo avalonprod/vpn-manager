@@ -8,6 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const peersCollection = "peers"
@@ -79,6 +80,52 @@ func (s *store) GetPeerByUserID(ctx context.Context, userID int64) (Peer, error)
 	}
 
 	return peer, nil
+}
+
+func (s *store) GetByAccessToken(ctx context.Context, token string) (Peer, error) {
+	var peer Peer
+
+	if token == "" {
+		return Peer{}, ErrPeerNotFound
+	}
+
+	err := s.db.FindOne(ctx, bson.M{"access_token": token}).Decode(&peer)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return Peer{}, ErrPeerNotFound
+		}
+		return Peer{}, err
+	}
+
+	return peer, nil
+}
+
+func (s *store) SetAccessToken(ctx context.Context, userID int64, token string) error {
+	res, err := s.db.UpdateOne(ctx,
+		bson.M{"user_id": userID},
+		bson.M{"$set": bson.M{"access_token": token}},
+	)
+	if err != nil {
+		return err
+	}
+
+	if res.MatchedCount == 0 {
+		return ErrPeerNotFound
+	}
+
+	return nil
+}
+
+func (s *store) EnsureAccessTokenIndex(ctx context.Context) error {
+	_, err := s.db.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys: bson.D{{Key: "access_token", Value: 1}},
+		Options: options.Index().
+			SetUnique(true).
+			SetSparse(true).
+			SetName("access_token_unique"),
+	})
+
+	return err
 }
 
 func (s *store) GetActivePeerByUserID(ctx context.Context, userID int64) (Peer, error) {

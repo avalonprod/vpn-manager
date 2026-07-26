@@ -17,6 +17,9 @@ type IStore interface {
 	SetActive(ctx context.Context, userID int64) error
 	Deactivate(ctx context.Context, userID int64) error
 	SetImported(ctx context.Context, userID int64, val bool, importedAt time.Time) error
+	GetByAccessToken(ctx context.Context, token string) (Peer, error)
+	SetAccessToken(ctx context.Context, userID int64, token string) error
+	EnsureAccessTokenIndex(ctx context.Context) error
 	Totals(ctx context.Context) (Totals, error)
 	CountByLocation(ctx context.Context) ([]LocationCount, error)
 	GetPeersForUsers(ctx context.Context, userIDs []int64) (map[int64]Peer, error)
@@ -39,13 +42,19 @@ func (s *service) Create(ctx context.Context, userID int64) (Peer, error) {
 			uuid := uuid.New().String()
 			email := uuid[:7]
 
+			token, err := NewAccessToken()
+			if err != nil {
+				return Peer{}, err
+			}
+
 			peer = Peer{
-				UserID:     userID,
-				Email:      email,
-				UUID:       uuid,
-				IsActive:   true,
-				CreatedAt:  time.Now().UTC(),
-				IsImported: false,
+				UserID:      userID,
+				Email:       email,
+				UUID:        uuid,
+				AccessToken: token,
+				IsActive:    true,
+				CreatedAt:   time.Now().UTC(),
+				IsImported:  false,
 			}
 			id, err := s.store.Create(ctx, peer)
 			if err != nil {
@@ -102,6 +111,36 @@ func (s *service) DeletePeersByUserID(ctx context.Context, userID int64) error {
 
 func (s *service) SetImported(ctx context.Context, userID int64) error {
 	return s.store.SetImported(ctx, userID, true, time.Now().UTC())
+}
+
+func (s *service) EnsureAccessTokenIndex(ctx context.Context) error {
+	return s.store.EnsureAccessTokenIndex(ctx)
+}
+
+func (s *service) GetByAccessToken(ctx context.Context, token string) (Peer, error) {
+	return s.store.GetByAccessToken(ctx, token)
+}
+
+func (s *service) EnsureAccessToken(ctx context.Context, userID int64) (string, error) {
+	peer, err := s.store.GetPeerByUserID(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+
+	if peer.AccessToken != "" {
+		return peer.AccessToken, nil
+	}
+
+	token, err := NewAccessToken()
+	if err != nil {
+		return "", err
+	}
+
+	if err := s.store.SetAccessToken(ctx, userID, token); err != nil {
+		return "", err
+	}
+
+	return token, nil
 }
 
 func (s *service) Totals(ctx context.Context) (Totals, error) {

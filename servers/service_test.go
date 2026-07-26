@@ -190,6 +190,79 @@ func TestRegisterNewPeersFailsWhenBlockCheckFails(t *testing.T) {
 	}
 }
 
+func registerAgainstPanel(t *testing.T, handler http.HandlerFunc) (*stubPeers, error) {
+	t.Helper()
+
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	p := &stubPeers{}
+
+	s := &service{
+		store: &stubActiveStore{servers: []Server{{
+			ID:        "srv1",
+			Location:  "Almaty",
+			ApiUrl:    srv.URL,
+			AuthToken: "token",
+			InBoundID: 1,
+		}}},
+		peersService: p,
+		usersService: stubUsers{},
+	}
+
+	return p, s.RegisterNewPeers(context.Background(), 42)
+}
+
+func TestRegisterNewPeersTreatsExistingClientAsSuccess(t *testing.T) {
+	for _, msg := range []string{
+		"Something went wrong (email already in use: 0a8e470)",
+		"client already exists",
+		"duplicate email",
+	} {
+		p, err := registerAgainstPanel(t, func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(`{"success":false,"msg":"` + msg + `"}`))
+		})
+		if err != nil {
+			t.Fatalf("%q: err = %v, want nil — the client is already on the panel", msg, err)
+		}
+
+		if len(p.subsSet) != 1 || len(p.subsSet[0]) != 1 {
+			t.Fatalf("%q: subs = %v, want the server kept in the subscription", msg, p.subsSet)
+		}
+
+		if p.subsSet[0][0].Location != "Almaty" {
+			t.Errorf("%q: location = %q, want Almaty", msg, p.subsSet[0][0].Location)
+		}
+	}
+}
+
+func TestRegisterNewPeersStillFailsOnRealRejections(t *testing.T) {
+	p, err := registerAgainstPanel(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"success":false,"msg":"Inbound not found"}`))
+	})
+
+	if !errors.Is(err, ErrNoServersAvailable) {
+		t.Errorf("err = %v, want ErrNoServersAvailable", err)
+	}
+
+	if len(p.subsSet) != 1 || len(p.subsSet[0]) != 0 {
+		t.Errorf("subs = %v, want no subscription for a server that rejected us", p.subsSet)
+	}
+}
+
+func TestRegisterNewPeersSucceedsOnCleanAdd(t *testing.T) {
+	p, err := registerAgainstPanel(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"success":true,"msg":""}`))
+	})
+	if err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
+
+	if len(p.subsSet) != 1 || len(p.subsSet[0]) != 1 {
+		t.Errorf("subs = %v, want one entry", p.subsSet)
+	}
+}
+
 func TestRegisterNewPeersReportsWhenNoServerAccepted(t *testing.T) {
 	p := &stubPeers{}
 
@@ -256,6 +329,16 @@ func TestDeletePeerFailsWhenTokenRejected(t *testing.T) {
 
 	if !errors.Is(err, ErrPanelUnauthorized) {
 		t.Errorf("err = %v, want ErrPanelUnauthorized", err)
+	}
+}
+
+func TestDeletePeerFailsOnInboundMisconfiguration(t *testing.T) {
+	err := deleteAgainstPanel(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"success":false,"msg":"Inbound not found"}`))
+	})
+
+	if err == nil {
+		t.Fatal("a panel misconfiguration was counted as a successful revocation")
 	}
 }
 

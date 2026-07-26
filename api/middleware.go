@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -9,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"vpn-manager/peers"
 	"vpn-manager/subscriptions"
 )
 
@@ -57,14 +59,62 @@ func (h *Handler) authorizeCloudPayment(next http.Handler) http.Handler {
 	})
 }
 
-func (h *Handler) BlockGuard(next http.Handler) http.Handler {
+type contextKey string
+
+const userIDContextKey contextKey = "user_id"
+
+func userIDFrom(ctx context.Context) (int64, bool) {
+	userID, ok := ctx.Value(userIDContextKey).(int64)
+	return userID, ok
+}
+
+func (h *Handler) Identify(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		const op = "Identify"
+
+		query := r.URL.Query()
+
+		if token := query.Get("token"); token != "" {
+			peer, err := h.peersService.GetByAccessToken(r.Context(), token)
+			if err != nil {
+				if errors.Is(err, peers.ErrPeerNotFound) {
+					h.logger.Warnf("%s: unknown access token", op)
+					http.Error(w, "invalid link", http.StatusNotFound)
+					return
+				}
+				h.logger.Errorf("%s: failed to resolve access token: %v", op, err)
+				http.Error(w, "failed to resolve link", http.StatusInternalServerError)
+				return
+			}
+
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userIDContextKey, peer.UserID)))
+			return
+		}
+
+		if !h.allowLegacyLinks {
+			h.logger.Warnf("%s: request without an access token to %s", op, r.URL.Path)
+			http.Error(w, "invalid link", http.StatusNotFound)
+			return
+		}
+
+		userID, err := strconv.ParseInt(query.Get("user_id"), 10, 64)
+		if err != nil {
+			h.logger.Warnf("%s: invalid user_id: %v", op, err)
+			http.Error(w, "invalid user_id", http.StatusBadRequest)
+			return
+		}
+
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userIDContextKey, userID)))
+	})
+}
+
+func (h *Handler) BlockGuard(next http.Handler) http.Handler {
+	return h.Identify(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		const op = "BlockGuard"
 
-		userID, err := strconv.ParseInt(r.URL.Query().Get("user_id"), 10, 64)
-		if err != nil {
-			h.logger.Warnf("%s: invalid user_id: %v error: %w", op, userID, err)
-			http.Error(w, "invalid user_id", http.StatusBadRequest)
+		userID, ok := userIDFrom(r.Context())
+		if !ok {
+			http.Error(w, "invalid link", http.StatusNotFound)
 			return
 		}
 
@@ -82,7 +132,7 @@ func (h *Handler) BlockGuard(next http.Handler) http.Handler {
 		}
 
 		next.ServeHTTP(w, r)
-	})
+	}))
 }
 
 func (h *Handler) AccessGuard(next http.Handler) http.Handler {

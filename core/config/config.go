@@ -18,6 +18,7 @@ type (
 		ApiUrl               string
 		Port                 string
 		ServerTokenEncKey    string
+		AllowLegacySubLinks  bool
 		MongoDB              MongoDB
 		Apps                 Apps
 		CloudPayments        CloudPayments
@@ -74,6 +75,11 @@ func MustLoad() *Config {
 	cfg.ServerTokenEncKey = strings.TrimSpace(os.Getenv("SERVER_TOKEN_ENC_KEY"))
 	if cfg.ServerTokenEncKey == "" {
 		log.Fatal("SERVER_TOKEN_ENC_KEY is required: generate one with `openssl rand -hex 32`")
+	}
+
+	cfg.AllowLegacySubLinks = os.Getenv("ALLOW_LEGACY_SUB_LINKS") == "true"
+	if cfg.AllowLegacySubLinks {
+		log.Print("WARNING: ALLOW_LEGACY_SUB_LINKS=true — /subs and /setup still accept an unauthenticated user_id, anyone can fetch another user's configs")
 	}
 
 	cfg.CloudPayments.PublicID = os.Getenv("CLOUDPAYMENTS_PUBLIC_ID")
