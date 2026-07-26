@@ -1,9 +1,10 @@
 package servers
 
 type Security struct {
-	PublicKey string `bson:"public_key"`
-	ShortID   string `bson:"short_id"`
-	SNI       string `bson:"SNI"`
+	PublicKey   string `bson:"public_key"`
+	ShortID     string `bson:"short_id"`
+	SNI         string `bson:"SNI"`
+	Fingerprint string `bson:"fingerprint,omitempty"`
 }
 
 type Server struct {

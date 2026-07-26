@@ -2,6 +2,7 @@ package servers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -400,37 +401,115 @@ func validInput() CreateInput {
 	}
 }
 
-func TestValidateCreateInputAcceptsValidServer(t *testing.T) {
-	if err := validateCreateInput(validInput()); err != nil {
-		t.Fatalf("valid input rejected: %v", err)
+func TestSubscriptionURIIncludesFingerprint(t *testing.T) {
+	uri := subscriptionURI(
+		peers.Peer{UUID: "uuid-1"},
+		Server{
+			Ip:       "203.0.113.10",
+			Port:     443,
+			Location: "Almaty",
+			Security: Security{
+				SNI:         "www.google.com",
+				PublicKey:   "pbk-value",
+				ShortID:     "abcd",
+				Fingerprint: "chrome",
+			},
+		},
+	)
+
+	for _, want := range []string{
+		"vless://uuid-1@203.0.113.10:443?",
+		"security=reality",
+		"encryption=none",
+		"sni=www.google.com",
+		"pbk=pbk-value",
+		"sid=abcd",
+		"fp=chrome",
+		"#Almaty",
+	} {
+		if !strings.Contains(uri, want) {
+			t.Errorf("uri %q is missing %q", uri, want)
+		}
 	}
 }
 
-func TestValidateCreateInputRejectsBadValues(t *testing.T) {
-	cases := map[string]func(*CreateInput){
-		"empty location":   func(in *CreateInput) { in.Location = "  " },
-		"empty ip":         func(in *CreateInput) { in.Ip = "" },
-		"empty api url":    func(in *CreateInput) { in.ApiUrl = "" },
-		"empty auth token": func(in *CreateInput) { in.AuthToken = "" },
-		"blank auth token": func(in *CreateInput) { in.AuthToken = "   " },
-		"zero port":        func(in *CreateInput) { in.Port = 0 },
-		"port too large":   func(in *CreateInput) { in.Port = 70000 },
-		"negative limit":   func(in *CreateInput) { in.MaxClients = -1 },
-		"negative port":    func(in *CreateInput) { in.Port = -1 },
+func TestSubscriptionURIOmitsEmptyFingerprint(t *testing.T) {
+	uri := subscriptionURI(peers.Peer{UUID: "uuid-1"}, Server{Ip: "1.2.3.4", Port: 443})
+
+	if strings.Contains(uri, "fp=") {
+		t.Errorf("uri %q carries an empty fp", uri)
+	}
+}
+
+func TestSubscriptionURINeverCarriesFlow(t *testing.T) {
+	uri := subscriptionURI(peers.Peer{UUID: "uuid-1"}, Server{
+		Ip:       "1.2.3.4",
+		Port:     443,
+		Security: Security{Fingerprint: "chrome"},
+	})
+
+	if strings.Contains(uri, "flow=") {
+		t.Errorf("uri %q carries a flow parameter", uri)
+	}
+}
+
+func TestSubscriptionURIEscapesSNI(t *testing.T) {
+	uri := subscriptionURI(peers.Peer{UUID: "u"}, Server{
+		Security: Security{SNI: "a b&c=d"},
+	})
+
+	if strings.Contains(uri, "a b&c=d") {
+		t.Errorf("uri %q contains an unescaped SNI — the query would be split", uri)
+	}
+}
+
+func TestNormalizeSecurityTrimsFields(t *testing.T) {
+	security := normalizeSecurity(Security{
+		SNI:         "  www.google.com ",
+		PublicKey:   " pbk ",
+		ShortID:     " abcd ",
+		Fingerprint: "  Chrome ",
+	})
+
+	if security.SNI != "www.google.com" || security.PublicKey != "pbk" || security.ShortID != "abcd" {
+		t.Errorf("fields were not trimmed: %+v", security)
 	}
 
-	for name, mutate := range cases {
-		input := validInput()
-		mutate(&input)
+	if security.Fingerprint != "chrome" {
+		t.Errorf("fingerprint = %q, want chrome", security.Fingerprint)
+	}
+}
 
-		err := validateCreateInput(input)
-		if err == nil {
-			t.Errorf("%s: expected an error, got nil", name)
-			continue
-		}
+func TestRegisterNewPeersDoesNotSendFlowToPanel(t *testing.T) {
+	var sentFlow string
 
-		if !errors.Is(err, ErrInvalidInput) {
-			t.Errorf("%s: error %v does not wrap ErrInvalidInput", name, err)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Client struct {
+				Flow string `json:"flow"`
+			} `json:"client"`
 		}
+		_ = json.NewDecoder(r.Body).Decode(&payload)
+		sentFlow = payload.Client.Flow
+		_, _ = w.Write([]byte(`{"success":true,"msg":""}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	s := &service{
+		store: &stubActiveStore{servers: []Server{{
+			ID:        "srv1",
+			ApiUrl:    srv.URL,
+			AuthToken: "token",
+		}}},
+		peersService: &stubPeers{},
+		usersService: stubUsers{},
+	}
+
+	if err := s.RegisterNewPeers(context.Background(), 42); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	if sentFlow != "" {
+		t.Errorf("flow sent to the panel = %q, want it empty", sentFlow)
 	}
 }

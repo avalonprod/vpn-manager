@@ -108,6 +108,23 @@ type RegisterNewPeerOutput struct {
 	Uri      string
 }
 
+func subscriptionURI(peer peers.Peer, server Server) string {
+	params := []string{
+		"security=reality",
+		"encryption=none",
+		"sni=" + url.QueryEscape(server.Security.SNI),
+		"pbk=" + url.QueryEscape(server.Security.PublicKey),
+		"sid=" + url.QueryEscape(server.Security.ShortID),
+	}
+
+	if fingerprint := server.Security.Fingerprint; fingerprint != "" {
+		params = append(params, "fp="+url.QueryEscape(fingerprint))
+	}
+
+	return fmt.Sprintf("vless://%s@%s:%d?%s#%s",
+		peer.UUID, server.Ip, server.Port, strings.Join(params, "&"), server.Location)
+}
+
 func (s *service) RegisterNewPeers(ctx context.Context, userID int64) error {
 	blocked, err := s.usersService.IsBlocked(ctx, userID)
 	if err != nil {
@@ -168,12 +185,10 @@ func (s *service) RegisterNewPeers(ctx context.Context, userID int64) error {
 			}
 		}
 
-		sub := fmt.Sprintf("vless://%s@%s:%d?security=reality&encryption=none&sni=%s&pbk=%s&sid=%s#%s", peer.UUID, server.Ip, server.Port, url.QueryEscape(server.Security.SNI), server.Security.PublicKey, server.Security.ShortID, server.Location)
-
 		subs = append(subs, peers.Sub{
 			Location: server.Location,
 			ServerID: server.ID,
-			URL:      sub,
+			URL:      subscriptionURI(peer, server),
 			Enabled:  true,
 		})
 	}
@@ -205,6 +220,15 @@ func (s *service) Count(ctx context.Context) (total int64, active int64, err err
 	return s.store.Count(ctx)
 }
 
+func normalizeSecurity(security Security) Security {
+	security.PublicKey = strings.TrimSpace(security.PublicKey)
+	security.ShortID = strings.TrimSpace(security.ShortID)
+	security.SNI = strings.TrimSpace(security.SNI)
+	security.Fingerprint = strings.ToLower(strings.TrimSpace(security.Fingerprint))
+
+	return security
+}
+
 func validateCreateInput(input CreateInput) error {
 	switch {
 	case strings.TrimSpace(input.Location) == "":
@@ -228,6 +252,8 @@ func (s *service) Create(ctx context.Context, input CreateInput) (Server, error)
 	if err := validateCreateInput(input); err != nil {
 		return Server{}, err
 	}
+
+	input.Security = normalizeSecurity(input.Security)
 
 	server := Server{
 		Location:   strings.TrimSpace(input.Location),
@@ -296,7 +322,7 @@ func (s *service) Update(ctx context.Context, serverID string, input UpdateInput
 		fields["is_active"] = *input.IsActive
 	}
 	if input.Security != nil {
-		fields["security"] = *input.Security
+		fields["security"] = normalizeSecurity(*input.Security)
 	}
 
 	if err := s.store.Update(ctx, serverID, fields); err != nil {

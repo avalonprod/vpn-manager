@@ -205,7 +205,7 @@ func (h *Handler) setup(w http.ResponseWriter, r *http.Request) {
 	case "ios", "macos":
 		deep = fmt.Sprintf("streisand://import/%s", subsURL)
 	case "android":
-		deep = fmt.Sprintf("v2raytun://import/%s", subsURL)
+		deep = fmt.Sprintf("hiddify://import/%s", subsURL)
 	}
 
 	http.Redirect(w, r, deep, http.StatusTemporaryRedirect)

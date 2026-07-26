@@ -9,16 +9,18 @@ import (
 )
 
 type securityPayload struct {
-	PublicKey string `json:"public_key"`
-	ShortID   string `json:"short_id"`
-	SNI       string `json:"sni"`
+	PublicKey   string `json:"public_key"`
+	ShortID     string `json:"short_id"`
+	SNI         string `json:"sni"`
+	Fingerprint string `json:"fingerprint"`
 }
 
 func (s securityPayload) toDomain() servers.Security {
 	return servers.Security{
-		PublicKey: s.PublicKey,
-		ShortID:   s.ShortID,
-		SNI:       s.SNI,
+		PublicKey:   s.PublicKey,
+		ShortID:     s.ShortID,
+		SNI:         s.SNI,
+		Fingerprint: s.Fingerprint,
 	}
 }
 
@@ -50,9 +52,10 @@ func toServerResponse(server servers.Server) serverResponse {
 		MaxClients:   server.MaxClients,
 		IsActive:     server.IsActive,
 		Security: securityPayload{
-			PublicKey: server.Security.PublicKey,
-			ShortID:   server.Security.ShortID,
-			SNI:       server.Security.SNI,
+			PublicKey:   server.Security.PublicKey,
+			ShortID:     server.Security.ShortID,
+			SNI:         server.Security.SNI,
+			Fingerprint: server.Security.Fingerprint,
 		},
 	}
 }
