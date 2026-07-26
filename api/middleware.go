@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/hex"
+	"encoding/base64"
 	"errors"
 	"io"
 	"net/http"
@@ -12,31 +12,43 @@ import (
 	"vpn-manager/subscriptions"
 )
 
+const maxWebhookBody = 1 << 20
+
 func (h *Handler) authorizeCloudPayment(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		const op = "authorizeCloudPayment"
 
-		bodyBytes, err := io.ReadAll(r.Body)
+		bodyBytes, err := io.ReadAll(io.LimitReader(r.Body, maxWebhookBody))
 		if err != nil {
-			h.logger.Error(err)
+			h.logger.Errorf("%s: failed to read body: %v", op, err)
 			http.Error(w, "Failed to read body", http.StatusBadRequest)
 			return
 		}
-		r.Body = io.NopCloser(io.LimitReader(io.MultiReader(io.NopCloser(bytes.NewReader(bodyBytes))), int64(len(bodyBytes))))
+		r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
-		receivedHMAC := r.Header.Get("Content-HMAC")
-		if receivedHMAC == "" {
-			h.logger.Debug("Missing Content-HMAC header")
+		received := r.Header.Get("Content-HMAC")
+		if received == "" {
+			received = r.Header.Get("X-Content-HMAC")
+		}
+
+		if received == "" {
+			h.logger.Warnf("%s: request without an HMAC header", op)
 			http.Error(w, "Missing Content-HMAC header", http.StatusForbidden)
+			return
+		}
+
+		signature, err := base64.StdEncoding.DecodeString(received)
+		if err != nil {
+			h.logger.Warnf("%s: HMAC header is not valid base64", op)
+			http.Error(w, "Invalid HMAC signature", http.StatusForbidden)
 			return
 		}
 
 		mac := hmac.New(sha256.New, []byte(h.cloudPaymentsSecret))
 		mac.Write(bodyBytes)
-		expectedMAC := hex.EncodeToString(mac.Sum(nil))
 
-		if !hmac.Equal([]byte(receivedHMAC), []byte(expectedMAC)) {
-			h.logger.Error(err)
+		if !hmac.Equal(signature, mac.Sum(nil)) {
+			h.logger.Warnf("%s: HMAC signature mismatch", op)
 			http.Error(w, "Invalid HMAC signature", http.StatusForbidden)
 			return
 		}
@@ -45,13 +57,11 @@ func (h *Handler) authorizeCloudPayment(next http.Handler) http.Handler {
 	})
 }
 
-func (h *Handler) AccessGuard(next http.Handler) http.Handler {
+func (h *Handler) BlockGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		const op = "AccessGuard"
+		const op = "BlockGuard"
 
-		query := r.URL.Query()
-
-		userID, err := strconv.ParseInt(query.Get("user_id"), 10, 64)
+		userID, err := strconv.ParseInt(r.URL.Query().Get("user_id"), 10, 64)
 		if err != nil {
 			h.logger.Warnf("%s: invalid user_id: %v error: %w", op, userID, err)
 			http.Error(w, "invalid user_id", http.StatusBadRequest)
@@ -66,8 +76,23 @@ func (h *Handler) AccessGuard(next http.Handler) http.Handler {
 		}
 
 		if blocked {
-			h.logger.Warnf("%s: blocked user_id: %d tried to access", op, userID)
+			h.logger.Warnf("%s: blocked user_id: %d tried to access %s", op, userID, r.URL.Path)
 			http.Error(w, "access denied", http.StatusForbidden)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (h *Handler) AccessGuard(next http.Handler) http.Handler {
+	return h.BlockGuard(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		const op = "AccessGuard"
+
+		userID, err := strconv.ParseInt(r.URL.Query().Get("user_id"), 10, 64)
+		if err != nil {
+			h.logger.Warnf("%s: invalid user_id: %v error: %w", op, userID, err)
+			http.Error(w, "invalid user_id", http.StatusBadRequest)
 			return
 		}
 
@@ -88,5 +113,5 @@ func (h *Handler) AccessGuard(next http.Handler) http.Handler {
 		}
 
 		next.ServeHTTP(w, r)
-	})
+	}))
 }

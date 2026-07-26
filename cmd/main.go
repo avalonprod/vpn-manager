@@ -70,7 +70,7 @@ func main() {
 
 	usersService := users.NewService(users.NewStore(mongodb))
 	peersService := peers.NewService(peers.NewStore(mongodb))
-	serversService := servers.NewService(servers.NewStore(mongodb, tokenCipher), peersService, cfg.ApiUrl)
+	serversService := servers.NewService(servers.NewStore(mongodb, tokenCipher), peersService, usersService, cfg.ApiUrl)
 	plansService := plans.NewService(plans.NewStore(mongodb))
 	paymentsService := payments.NewService(payments.NewStore(mongodb), plansService,
 		payments.CloudPaymentsConfig{
@@ -135,8 +135,12 @@ func main() {
 
 	var renewSubscription = func(ctx context.Context, t tasks.Task) error {
 		sub, err := subscriptionsService.GetByUserID(ctx, t.UserID)
-		if err != nil && !sub.Active {
+		if err != nil {
 			return err
+		}
+
+		if !sub.Active {
+			return tasksService.MarkDone(ctx, t.ID)
 		}
 
 		if err := serversService.RegisterNewPeers(context.Background(), t.UserID); err != nil {
@@ -175,6 +179,7 @@ func main() {
 	go runner.Run(ctx, 1)
 
 	go jobs.RunDisableExpiredAccess(ctx, subscriptionsService, peersService, serversService, bot, logger)
+	go jobs.RunRevokeBlockedAccess(ctx, usersService, peersService, serversService, logger)
 
 	go srv.Run()
 	go bot.Run()

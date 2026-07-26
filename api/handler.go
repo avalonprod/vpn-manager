@@ -108,10 +108,10 @@ func (h *Handler) RegisterRoutes() *mux.Router {
 
 	r.Handle("/subs", h.AccessGuard(http.HandlerFunc(h.getSubs))).Methods("GET")
 	r.Handle("/setup", h.AccessGuard(http.HandlerFunc(h.setup))).Methods("GET")
-	r.HandleFunc("/apps", h.downloadApp).Methods("GET")
-	r.HandleFunc("/subscribe", h.handleSubscribe).Methods("GET")
+	r.Handle("/apps", h.BlockGuard(http.HandlerFunc(h.downloadApp))).Methods("GET")
+	r.Handle("/subscribe", h.BlockGuard(http.HandlerFunc(h.handleSubscribe))).Methods("GET")
 	r.HandleFunc("/cloudpayments/webhook/check", h.handleCheckCloudPaymentsWebhook).Methods("GET")
-	r.HandleFunc("/cloudpayments/webhook/pay", h.handlePayCloudPaymentsWebhook).Methods("POST")
+	r.Handle("/cloudpayments/webhook/pay", h.authorizeCloudPayment(http.HandlerFunc(h.handlePayCloudPaymentsWebhook))).Methods("POST")
 
 	if h.admin != nil {
 		h.admin.RegisterRoutes(r)

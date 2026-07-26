@@ -34,6 +34,7 @@ type IServersService interface {
 	CheckHealth(ctx context.Context, serverID string) (servers.Health, error)
 	CheckAllHealth(ctx context.Context) ([]servers.Health, error)
 	DeletePeerFromServer(ctx context.Context, serverID, email string) error
+	RevokeAccessEverywhere(ctx context.Context, email string) (servers.RevocationResult, error)
 	RegisterNewPeers(ctx context.Context, userID int64) error
 }
 

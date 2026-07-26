@@ -9,6 +9,7 @@ import (
 	"time"
 	"vpn-manager/payments"
 	"vpn-manager/peers"
+	"vpn-manager/servers"
 	"vpn-manager/subscriptions"
 	"vpn-manager/users"
 
@@ -348,21 +349,20 @@ func (h *Handler) revokeAccess(ctx context.Context, userID int64) (revoked int, 
 	peer, hasPeer, err := h.lookupPeer(ctx, userID)
 	if err != nil {
 		h.logger.Errorf("admin: failed to load peer for user %d: %v", userID, err)
-		return 0, failed
+		return 0, []string{"не удалось прочитать подключения пользователя"}
 	}
 
 	if !hasPeer {
 		return 0, failed
 	}
 
-	for _, sub := range peer.Subs {
-		if err := h.serversService.DeletePeerFromServer(ctx, sub.ServerID, peer.Email); err != nil {
-			h.logger.Errorf("admin: failed to remove peer of user %d from server %s: %v", userID, sub.ServerID, err)
-			failed = append(failed, sub.Location)
-			continue
-		}
-		revoked++
+	result, err := h.serversService.RevokeAccessEverywhere(ctx, peer.Email)
+	if err != nil {
+		h.logger.Errorf("admin: failed to revoke access for user %d: %v", userID, err)
+		return 0, []string{"не удалось получить список серверов"}
 	}
+
+	revoked, failed = result.Revoked, result.Failed
 
 	if err := h.peersService.DeactivatePeer(ctx, userID); err != nil {
 		h.logger.Errorf("admin: failed to deactivate peer for user %d: %v", userID, err)
@@ -390,28 +390,47 @@ func (h *Handler) handleUnblockUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accessRestored := false
-
-	sub, hasSub, err := h.lookupSubscription(ctx, userID)
-	if err != nil {
-		h.logger.Errorf("admin: failed to load subscription for user %d: %v", userID, err)
-	}
-
-	if hasSub && sub.Active && sub.ExpiresAt.After(time.Now().UTC()) {
-		if err := h.serversService.RegisterNewPeers(ctx, userID); err != nil {
-			h.logger.Errorf("admin: failed to re-register peers for user %d: %v", userID, err)
-		} else if err := h.peersService.ActivatePeer(ctx, userID); err != nil {
-			h.logger.Errorf("admin: failed to activate peer for user %d: %v", userID, err)
-		} else {
-			accessRestored = true
-		}
-	}
+	accessRestored, reason := h.restoreAccess(ctx, userID)
 
 	claims, _ := ClaimsFrom(ctx)
-	h.audit(ctx, claims.Subject, clientIP(r), "user.unblock", strconv.FormatInt(userID, 10), "")
+	h.audit(ctx, claims.Subject, clientIP(r), "user.unblock", strconv.FormatInt(userID, 10), reason)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"status":          "active",
 		"access_restored": accessRestored,
+		"reason":          reason,
 	})
+}
+
+func (h *Handler) restoreAccess(ctx context.Context, userID int64) (bool, string) {
+	sub, hasSub, err := h.lookupSubscription(ctx, userID)
+	if err != nil {
+		h.logger.Errorf("admin: failed to load subscription for user %d: %v", userID, err)
+		return false, "не удалось прочитать подписку"
+	}
+
+	if !hasSub {
+		return false, "у пользователя нет подписки"
+	}
+
+	if !sub.Active || !sub.ExpiresAt.After(time.Now().UTC()) {
+		return false, "подписка неактивна или истекла"
+	}
+
+	if err := h.serversService.RegisterNewPeers(ctx, userID); err != nil {
+		h.logger.Errorf("admin: failed to re-register peers for user %d: %v", userID, err)
+
+		if errors.Is(err, servers.ErrNoServersAvailable) {
+			return false, "ни один сервер не принял клиента — проверьте доступность панелей"
+		}
+
+		return false, "не удалось вернуть подключения на серверы"
+	}
+
+	if err := h.peersService.ActivatePeer(ctx, userID); err != nil {
+		h.logger.Errorf("admin: failed to activate peer for user %d: %v", userID, err)
+		return false, "подключения выданы, но пир не активирован"
+	}
+
+	return true, ""
 }

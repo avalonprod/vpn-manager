@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"vpn-manager/peers"
 
 	"go.mongodb.org/mongo-driver/bson"
 )
@@ -114,6 +115,177 @@ func TestCallPanelReportsRejectedToken(t *testing.T) {
 
 	if err == nil || !strings.Contains(err.Error(), "rejected the auth token") {
 		t.Errorf("err = %v, want a rejected-token error", err)
+	}
+}
+
+type stubUsers struct {
+	blocked bool
+	err     error
+}
+
+func (s stubUsers) IsBlocked(context.Context, int64) (bool, error) {
+	return s.blocked, s.err
+}
+
+type stubPeers struct {
+	created  bool
+	subsSet  [][]peers.Sub
+	createFn func() (peers.Peer, error)
+}
+
+func (s *stubPeers) Create(context.Context, int64) (peers.Peer, error) {
+	s.created = true
+	if s.createFn != nil {
+		return s.createFn()
+	}
+	return peers.Peer{ID: "507f1f77bcf86cd799439011", UUID: "uuid-1", Email: "abc1234"}, nil
+}
+
+func (s *stubPeers) UpdateSubs(_ context.Context, _ string, subs []peers.Sub) error {
+	s.subsSet = append(s.subsSet, subs)
+	return nil
+}
+
+type stubActiveStore struct {
+	IStore
+	servers []Server
+}
+
+func (s *stubActiveStore) GetAllActiveServers(context.Context) ([]Server, error) {
+	return s.servers, nil
+}
+
+func TestRegisterNewPeersRefusesBlockedUser(t *testing.T) {
+	p := &stubPeers{}
+
+	s := &service{
+		store:        &stubActiveStore{servers: []Server{{ID: "srv1", AuthToken: "t", ApiUrl: "http://unused"}}},
+		peersService: p,
+		usersService: stubUsers{blocked: true},
+	}
+
+	err := s.RegisterNewPeers(context.Background(), 42)
+
+	if !errors.Is(err, ErrUserBlocked) {
+		t.Fatalf("err = %v, want ErrUserBlocked", err)
+	}
+
+	if p.created {
+		t.Error("peer was created for a blocked user")
+	}
+
+	if len(p.subsSet) != 0 {
+		t.Errorf("subs were written for a blocked user: %v", p.subsSet)
+	}
+}
+
+func TestRegisterNewPeersFailsWhenBlockCheckFails(t *testing.T) {
+	s := &service{
+		peersService: &stubPeers{},
+		usersService: stubUsers{err: errors.New("mongo down")},
+	}
+
+	if err := s.RegisterNewPeers(context.Background(), 42); err == nil {
+		t.Fatal("a failing block check was treated as not blocked")
+	}
+}
+
+func TestRegisterNewPeersReportsWhenNoServerAccepted(t *testing.T) {
+	p := &stubPeers{}
+
+	s := &service{
+		store:        &stubActiveStore{servers: []Server{{ID: "srv1", AuthToken: ""}}},
+		peersService: p,
+		usersService: stubUsers{},
+	}
+
+	err := s.RegisterNewPeers(context.Background(), 42)
+
+	if !errors.Is(err, ErrNoServersAvailable) {
+		t.Errorf("err = %v, want ErrNoServersAvailable", err)
+	}
+
+	if len(p.subsSet) != 1 || len(p.subsSet[0]) != 0 {
+		t.Errorf("subs = %v, want a single empty write so no stale config survives", p.subsSet)
+	}
+}
+
+type stubServerStore struct {
+	IStore
+	server Server
+}
+
+func (s *stubServerStore) GetByID(context.Context, string) (Server, error) {
+	return s.server, nil
+}
+
+func deleteAgainstPanel(t *testing.T, handler http.HandlerFunc) error {
+	t.Helper()
+
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+
+	s := &service{store: &stubServerStore{server: Server{
+		ID:        "srv1",
+		ApiUrl:    srv.URL,
+		AuthToken: "token",
+		InBoundID: 1,
+	}}}
+
+	return s.DeletePeerFromServer(context.Background(), "srv1", "abc1234")
+}
+
+func TestDeletePeerFailsWhenEndpointMissing(t *testing.T) {
+	err := deleteAgainstPanel(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+
+	if err == nil {
+		t.Fatal("a 404 from the panel was reported as a successful revocation")
+	}
+
+	if !errors.Is(err, ErrPanelEndpointMissing) {
+		t.Errorf("err = %v, want ErrPanelEndpointMissing", err)
+	}
+}
+
+func TestDeletePeerFailsWhenTokenRejected(t *testing.T) {
+	err := deleteAgainstPanel(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	})
+
+	if !errors.Is(err, ErrPanelUnauthorized) {
+		t.Errorf("err = %v, want ErrPanelUnauthorized", err)
+	}
+}
+
+func TestDeletePeerSucceedsWhenClientAlreadyGone(t *testing.T) {
+	err := deleteAgainstPanel(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"success":false,"msg":"client not found"}`))
+	})
+
+	if err != nil {
+		t.Errorf("err = %v, want nil for an already-removed client", err)
+	}
+}
+
+func TestDeletePeerFailsOnOtherPanelRejections(t *testing.T) {
+	err := deleteAgainstPanel(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"success":false,"msg":"database is locked"}`))
+	})
+
+	if err == nil {
+		t.Fatal("an unrelated panel rejection was treated as success")
+	}
+}
+
+func TestDeletePeerSucceedsOnOK(t *testing.T) {
+	err := deleteAgainstPanel(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"success":true,"msg":""}`))
+	})
+
+	if err != nil {
+		t.Errorf("err = %v, want nil", err)
 	}
 }
 

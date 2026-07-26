@@ -24,12 +24,16 @@ func NewStore(db *mongo.Database) *store {
 
 func (s *store) Create(ctx context.Context, peer Peer) (string, error) {
 	res, err := s.db.InsertOne(ctx, peer)
+	if err != nil {
+		return "", err
+	}
+
 	oid, ok := res.InsertedID.(primitive.ObjectID)
 	if !ok {
 		return "", fmt.Errorf("inserted ID is not an ObjectID: %T", res.InsertedID)
 	}
 
-	return oid.Hex(), err
+	return oid.Hex(), nil
 }
 
 func (s *store) GetByID(ctx context.Context, ID string) (Peer, error) {

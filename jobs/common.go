@@ -3,6 +3,7 @@ package jobs
 import (
 	"context"
 	"vpn-manager/peers"
+	"vpn-manager/servers"
 )
 
 type IBot interface {
@@ -10,7 +11,7 @@ type IBot interface {
 }
 
 type IServersService interface {
-	DeletePeerFromServer(ctx context.Context, serverID, email string) error
+	RevokeAccessEverywhere(ctx context.Context, email string) (servers.RevocationResult, error)
 }
 
 type IPeersService interface {

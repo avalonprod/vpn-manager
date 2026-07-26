@@ -45,10 +45,11 @@ func RunDisableExpiredAccess(
 					continue
 				}
 
-				for _, sub := range peer.Subs {
-					if err := servers.DeletePeerFromServer(ctx, sub.ServerID, peer.Email); err != nil {
-						log.Errorf("remove client on server %s for user %d: %v", sub.ServerID, s.UserID, err)
-					}
+				result, err := servers.RevokeAccessEverywhere(ctx, peer.Email)
+				if err != nil {
+					log.Errorf("revoke access for user %d: %v", s.UserID, err)
+				} else if len(result.Failed) > 0 {
+					log.Errorf("access for user %d is still live on: %v", s.UserID, result.Failed)
 				}
 
 				if err := peers.DeactivatePeer(ctx, s.UserID); err != nil {

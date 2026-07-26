@@ -13,6 +13,7 @@ import (
 
 type IUsersService interface {
 	Register(ctx context.Context, input users.CreateUserInput) error
+	IsBlocked(ctx context.Context, userID int64) (bool, error)
 }
 
 type ITasksService interface {
@@ -80,6 +81,8 @@ func NewBot(
 func (b *Bot) Run() {
 
 	handler := b.bot.Group()
+
+	handler.Use(b.blockGuard)
 
 	handler.Use(func(next telebot.HandlerFunc) telebot.HandlerFunc {
 		return func(c telebot.Context) error {

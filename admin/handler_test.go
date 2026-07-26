@@ -56,9 +56,14 @@ func (s *stubUsers) SignupsByDay(context.Context, time.Time) ([]users.DailyCount
 type stubServers struct {
 	healthCalled  bool
 	deletedClient []string
+	deletedFrom   []string
+	all           []servers.Server
 }
 
 func (s *stubServers) GetAll(context.Context) ([]servers.Server, error) {
+	if s.all != nil {
+		return s.all, nil
+	}
 	return []servers.Server{{ID: "srv1", Location: "Amsterdam"}}, nil
 }
 func (s *stubServers) GetByID(context.Context, string) (servers.Server, error) {
@@ -86,9 +91,28 @@ func (s *stubServers) CheckAllHealth(context.Context) ([]servers.Health, error) 
 	s.healthCalled = true
 	return []servers.Health{}, nil
 }
-func (s *stubServers) DeletePeerFromServer(_ context.Context, _, email string) error {
+func (s *stubServers) DeletePeerFromServer(_ context.Context, serverID, email string) error {
 	s.deletedClient = append(s.deletedClient, email)
+	s.deletedFrom = append(s.deletedFrom, serverID)
 	return nil
+}
+
+func (s *stubServers) RevokeAccessEverywhere(ctx context.Context, email string) (servers.RevocationResult, error) {
+	list, err := s.GetAll(ctx)
+	if err != nil {
+		return servers.RevocationResult{}, err
+	}
+
+	result := servers.RevocationResult{Failed: []string{}}
+	for _, server := range list {
+		if err := s.DeletePeerFromServer(ctx, server.ID, email); err != nil {
+			result.Failed = append(result.Failed, server.Location)
+			continue
+		}
+		result.Revoked++
+	}
+
+	return result, nil
 }
 func (s *stubServers) RegisterNewPeers(context.Context, int64) error { return nil }
 
@@ -365,6 +389,30 @@ func TestBlockUserRevokesAccess(t *testing.T) {
 
 	if len(f.servers.deletedClient) != 1 || f.servers.deletedClient[0] != "abc1234" {
 		t.Errorf("deleted clients = %v, want [abc1234]", f.servers.deletedClient)
+	}
+}
+
+func TestBlockUserRevokesBeyondPeerSubs(t *testing.T) {
+	f := newFixture(t)
+	f.servers.all = []servers.Server{
+		{ID: "srv1", Location: "Amsterdam"},
+		{ID: "srv2", Location: "Almaty"},
+	}
+
+	rec := f.do(t, http.MethodPost, "/admin/api/v1/users/1/block", f.login(t), "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
+	}
+
+	revoked := map[string]bool{}
+	for _, id := range f.servers.deletedFrom {
+		revoked[id] = true
+	}
+
+	for _, id := range []string{"srv1", "srv2"} {
+		if !revoked[id] {
+			t.Errorf("server %s was not revoked; revocation covered only %v", id, f.servers.deletedFrom)
+		}
 	}
 }
 

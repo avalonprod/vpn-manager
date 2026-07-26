@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -32,16 +33,22 @@ type IPeersService interface {
 	UpdateSubs(ctx context.Context, id string, subs []peers.Sub) error
 }
 
+type IUsersService interface {
+	IsBlocked(ctx context.Context, userID int64) (bool, error)
+}
+
 type service struct {
 	store        IStore
 	peersService IPeersService
+	usersService IUsersService
 	apiUrl       string
 }
 
-func NewService(store IStore, peersService IPeersService, apiUrl string) *service {
+func NewService(store IStore, peersService IPeersService, usersService IUsersService, apiUrl string) *service {
 	return &service{
 		store:        store,
 		peersService: peersService,
+		usersService: usersService,
 		apiUrl:       apiUrl,
 	}
 }
@@ -56,6 +63,15 @@ type panelResponse struct {
 	Msg     string `json:"msg"`
 }
 
+type PanelRejection struct {
+	ServerID string
+	Msg      string
+}
+
+func (e *PanelRejection) Error() string {
+	return fmt.Sprintf("server %s rejected the request: %s", e.ServerID, e.Msg)
+}
+
 func callPanel(client *http.Client, req *http.Request, server Server) error {
 	resp, err := client.Do(req)
 	if err != nil {
@@ -68,9 +84,9 @@ func callPanel(client *http.Client, req *http.Request, server Server) error {
 	switch resp.StatusCode {
 	case http.StatusOK:
 	case http.StatusUnauthorized, http.StatusForbidden:
-		return fmt.Errorf("server %s rejected the auth token", server.ID)
+		return fmt.Errorf("%w: server %s", ErrPanelUnauthorized, server.ID)
 	case http.StatusNotFound:
-		return fmt.Errorf("server %s: endpoint not found — check api_url and panel version", server.ID)
+		return fmt.Errorf("%w: server %s, check api_url and panel version", ErrPanelEndpointMissing, server.ID)
 	default:
 		return fmt.Errorf("server %s responded with status %s", server.ID, resp.Status)
 	}
@@ -81,7 +97,7 @@ func callPanel(client *http.Client, req *http.Request, server Server) error {
 	}
 
 	if !parsed.Success {
-		return fmt.Errorf("server %s rejected the request: %s", server.ID, parsed.Msg)
+		return &PanelRejection{ServerID: server.ID, Msg: parsed.Msg}
 	}
 
 	return nil
@@ -93,6 +109,15 @@ type RegisterNewPeerOutput struct {
 }
 
 func (s *service) RegisterNewPeers(ctx context.Context, userID int64) error {
+	blocked, err := s.usersService.IsBlocked(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("check block status of user %d: %w", userID, err)
+	}
+
+	if blocked {
+		return fmt.Errorf("%w: user %d", ErrUserBlocked, userID)
+	}
+
 	client := http.Client{Timeout: panelRequestTimeout}
 
 	peer, err := s.peersService.Create(ctx, userID)
@@ -150,7 +175,15 @@ func (s *service) RegisterNewPeers(ctx context.Context, userID int64) error {
 		})
 	}
 
-	return s.peersService.UpdateSubs(ctx, peer.ID, subs)
+	if err := s.peersService.UpdateSubs(ctx, peer.ID, subs); err != nil {
+		return err
+	}
+
+	if len(subs) == 0 {
+		return fmt.Errorf("%w: user %d", ErrNoServersAvailable, userID)
+	}
+
+	return nil
 }
 
 func (s *service) GetAllActiveServers(ctx context.Context) ([]Server, error) {
@@ -343,12 +376,41 @@ func (s *service) checkServer(ctx context.Context, server Server) Health {
 	return health
 }
 
+type RevocationResult struct {
+	Revoked int
+	Failed  []string
+}
+
+func (s *service) RevokeAccessEverywhere(ctx context.Context, email string) (RevocationResult, error) {
+	result := RevocationResult{Failed: []string{}}
+
+	serverList, err := s.store.GetAll(ctx)
+	if err != nil {
+		return result, err
+	}
+
+	for _, server := range serverList {
+		if err := s.deleteClient(ctx, server, email); err != nil {
+			log.Printf("revoke access for %s on server %s: %v", email, server.ID, err)
+			result.Failed = append(result.Failed, server.Location)
+			continue
+		}
+		result.Revoked++
+	}
+
+	return result, nil
+}
+
 func (s *service) DeletePeerFromServer(ctx context.Context, serverID, email string) error {
 	server, err := s.store.GetByID(ctx, serverID)
 	if err != nil {
 		return err
 	}
 
+	return s.deleteClient(ctx, server, email)
+}
+
+func (s *service) deleteClient(ctx context.Context, server Server, email string) error {
 	if server.AuthToken == "" {
 		return fmt.Errorf("%w: server %s has no auth token", ErrInvalidInput, server.ID)
 	}
@@ -367,15 +429,18 @@ func (s *service) DeletePeerFromServer(ctx context.Context, serverID, email stri
 
 	err = callPanel(&http.Client{Timeout: panelRequestTimeout}, req, server)
 
-	if err != nil && isClientMissing(err) {
+	var rejection *PanelRejection
+	if errors.As(err, &rejection) && clientAlreadyGone(rejection.Msg) {
 		return nil
 	}
 
 	return err
 }
 
-func isClientMissing(err error) bool {
-	msg := strings.ToLower(err.Error())
+func clientAlreadyGone(panelMsg string) bool {
+	msg := strings.ToLower(panelMsg)
 
-	return strings.Contains(msg, "not found") || strings.Contains(msg, "no such")
+	return strings.Contains(msg, "not found") ||
+		strings.Contains(msg, "no such") ||
+		strings.Contains(msg, "not exist")
 }
