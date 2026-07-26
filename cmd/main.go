@@ -17,6 +17,7 @@ import (
 	"vpn-manager/peers"
 	"vpn-manager/pkg/db/mongodb"
 	"vpn-manager/pkg/logger"
+	"vpn-manager/pkg/secret"
 	"vpn-manager/pkg/server"
 	"vpn-manager/plans"
 	"vpn-manager/servers"
@@ -62,9 +63,14 @@ func main() {
 	mongodb := mongodbClient.Database(cfg.MongoDB.Name)
 	logger := logger.NewLogger()
 
+	tokenCipher, err := secret.NewCipher(cfg.ServerTokenEncKey)
+	if err != nil {
+		log.Fatalf("invalid SERVER_TOKEN_ENC_KEY: %v", err)
+	}
+
 	usersService := users.NewService(users.NewStore(mongodb))
 	peersService := peers.NewService(peers.NewStore(mongodb))
-	serversService := servers.NewService(servers.NewStore(mongodb), peersService, cfg.ApiUrl)
+	serversService := servers.NewService(servers.NewStore(mongodb, tokenCipher), peersService, cfg.ApiUrl)
 	plansService := plans.NewService(plans.NewStore(mongodb))
 	paymentsService := payments.NewService(payments.NewStore(mongodb), plansService,
 		payments.CloudPaymentsConfig{

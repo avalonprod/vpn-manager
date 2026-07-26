@@ -2,6 +2,8 @@ package servers
 
 import (
 	"context"
+	"fmt"
+	"vpn-manager/pkg/secret"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -12,13 +14,26 @@ import (
 const serversCollection = "servers"
 
 type store struct {
-	db *mongo.Collection
+	db     *mongo.Collection
+	cipher *secret.Cipher
 }
 
-func NewStore(db *mongo.Database) *store {
+func NewStore(db *mongo.Database, cipher *secret.Cipher) *store {
 	return &store{
-		db: db.Collection(serversCollection),
+		db:     db.Collection(serversCollection),
+		cipher: cipher,
 	}
+}
+
+func (s *store) decodeToken(server *Server) error {
+	token, err := s.cipher.Decrypt(server.AuthToken)
+	if err != nil {
+		return fmt.Errorf("decrypt auth token of server %s: %w", server.ID, err)
+	}
+
+	server.AuthToken = token
+
+	return nil
 }
 
 func (s *store) GetAllActiveServers(ctx context.Context) ([]Server, error) {
@@ -43,6 +58,12 @@ func (s *store) find(ctx context.Context, filter bson.M) ([]Server, error) {
 		return nil, err
 	}
 
+	for i := range servers {
+		if err := s.decodeToken(&servers[i]); err != nil {
+			return nil, err
+		}
+	}
+
 	return servers, nil
 }
 
@@ -64,10 +85,21 @@ func (s *store) GetByID(ctx context.Context, serverID string) (Server, error) {
 		return Server{}, err
 	}
 
+	if err := s.decodeToken(&server); err != nil {
+		return Server{}, err
+	}
+
 	return server, nil
 }
 
 func (s *store) Create(ctx context.Context, server Server) (string, error) {
+	token, err := s.cipher.Encrypt(server.AuthToken)
+	if err != nil {
+		return "", fmt.Errorf("encrypt auth token: %w", err)
+	}
+
+	server.AuthToken = token
+
 	res, err := s.db.InsertOne(ctx, server)
 	if err != nil {
 		return "", err
@@ -84,6 +116,14 @@ func (s *store) Create(ctx context.Context, server Server) (string, error) {
 func (s *store) Update(ctx context.Context, serverID string, fields bson.M) error {
 	if len(fields) == 0 {
 		return nil
+	}
+
+	if raw, ok := fields["auth_token"].(string); ok {
+		token, err := s.cipher.Encrypt(raw)
+		if err != nil {
+			return fmt.Errorf("encrypt auth token: %w", err)
+		}
+		fields["auth_token"] = token
 	}
 
 	ObjectID, err := primitive.ObjectIDFromHex(serverID)

@@ -17,6 +17,7 @@ type (
 		TelegramWebhookPort  string
 		ApiUrl               string
 		Port                 string
+		ServerTokenEncKey    string
 		MongoDB              MongoDB
 		Apps                 Apps
 		CloudPayments        CloudPayments
@@ -69,6 +70,11 @@ func MustLoad() *Config {
 	cfg.MongoDB.Username = os.Getenv("MONGODB_USERNAME")
 	cfg.MongoDB.Password = os.Getenv("MONGODB_PASSWORD")
 	cfg.MongoDB.Name = os.Getenv("MONGODB_NAME")
+
+	cfg.ServerTokenEncKey = strings.TrimSpace(os.Getenv("SERVER_TOKEN_ENC_KEY"))
+	if cfg.ServerTokenEncKey == "" {
+		log.Fatal("SERVER_TOKEN_ENC_KEY is required: generate one with `openssl rand -hex 32`")
+	}
 
 	cfg.CloudPayments.PublicID = os.Getenv("CLOUDPAYMENTS_PUBLIC_ID")
 	cfg.CloudPayments.SecretKey = os.Getenv("CLOUDPAYMENTS_SECRET")
