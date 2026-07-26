@@ -2,9 +2,8 @@ package main
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -37,8 +36,15 @@ func main() {
 	defer cancel()
 
 	pref := telebot.Settings{
-		Token: "7597686428:AAEP_D5vzwuRjprtNKZ_jeQC7Fzx7mz-Bv4",
-
+		Token: cfg.TelegramAccessToken,
+		Poller: &telebot.Webhook{
+			Listen:           fmt.Sprintf(":%s", cfg.TelegramWebhookPort),
+			SecretToken:      cfg.TelegramWebhookToken,
+			IgnoreSetWebhook: true,
+			Endpoint: &telebot.WebhookEndpoint{
+				PublicURL: fmt.Sprintf("%s/webhook", cfg.ApiUrl),
+			},
+		},
 		ParseMode: telebot.ModeHTML,
 	}
 
@@ -164,12 +170,7 @@ func main() {
 
 	go jobs.RunDisableExpiredAccess(ctx, subscriptionsService, peersService, serversService, bot, logger)
 
-	go func() {
-		if err := srv.Run(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("http server stopped: %v", err)
-		}
-	}()
-
+	go srv.Run()
 	go bot.Run()
 
 	quit := make(chan os.Signal, 1)
