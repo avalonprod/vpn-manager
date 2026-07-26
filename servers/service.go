@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -32,19 +33,58 @@ type IPeersService interface {
 }
 
 type service struct {
-	store               IStore
-	peersService        IPeersService
-	ServerPanelPassword string
-	apiUrl              string
+	store        IStore
+	peersService IPeersService
+	apiUrl       string
 }
 
-func NewService(store IStore, peersService IPeersService, ServerPanelPassword string, apiUrl string) *service {
+func NewService(store IStore, peersService IPeersService, apiUrl string) *service {
 	return &service{
-		store:               store,
-		peersService:        peersService,
-		ServerPanelPassword: ServerPanelPassword,
-		apiUrl:              apiUrl,
+		store:        store,
+		peersService: peersService,
+		apiUrl:       apiUrl,
 	}
+}
+
+func authorize(req *http.Request, server Server) {
+	req.Header.Set("Authorization", "Bearer "+server.AuthToken)
+	req.Header.Set("X-Requested-With", "XMLHttpRequest")
+}
+
+type panelResponse struct {
+	Success bool   `json:"success"`
+	Msg     string `json:"msg"`
+}
+
+func callPanel(client *http.Client, req *http.Request, server Server) error {
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("server %s is unreachable: %w", server.ID, err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return fmt.Errorf("server %s rejected the auth token", server.ID)
+	case http.StatusNotFound:
+		return fmt.Errorf("server %s: endpoint not found — check api_url and panel version", server.ID)
+	default:
+		return fmt.Errorf("server %s responded with status %s", server.ID, resp.Status)
+	}
+
+	var parsed panelResponse
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return fmt.Errorf("server %s returned an unexpected response", server.ID)
+	}
+
+	if !parsed.Success {
+		return fmt.Errorf("server %s rejected the request: %s", server.ID, parsed.Msg)
+	}
+
+	return nil
 }
 
 type RegisterNewPeerOutput struct {
@@ -53,7 +93,7 @@ type RegisterNewPeerOutput struct {
 }
 
 func (s *service) RegisterNewPeers(ctx context.Context, userID int64) error {
-	client := http.Client{}
+	client := http.Client{Timeout: panelRequestTimeout}
 
 	peer, err := s.peersService.Create(ctx, userID)
 	if err != nil {
@@ -68,24 +108,13 @@ func (s *service) RegisterNewPeers(ctx context.Context, userID int64) error {
 	subs := make([]peers.Sub, 0, len(servers))
 
 	for _, server := range servers {
-		loginResp, err := client.PostForm(server.ApiUrl+"/login",
-			map[string][]string{
-				"username": {server.Username},
-				"password": {s.ServerPanelPassword},
-			})
-		if err != nil {
-			log.Printf("error logging in to server: %s err: %v", server.ID, err)
+		if server.AuthToken == "" {
+			log.Printf("skipping server %s: auth token is not set", server.ID)
 			continue
 		}
 
-		defer loginResp.Body.Close()
-		if loginResp.StatusCode != 200 {
-			log.Printf("error logging in to server: %s bad gateway", server.ID)
-			continue
-		}
-
-		setting, _ := json.Marshal(map[string]any{
-			"clients": []map[string]any{{
+		payload, _ := json.Marshal(map[string]any{
+			"client": map[string]any{
 				"id":         peer.UUID,
 				"email":      peer.Email,
 				"flow":       "",
@@ -93,27 +122,21 @@ func (s *service) RegisterNewPeers(ctx context.Context, userID int64) error {
 				"limitIp":    0,
 				"totalGB":    0,
 				"expiryTime": 0,
-			}},
+			},
+			"inboundIds": []int{server.InBoundID},
 		})
 
-		payload, _ := json.Marshal(map[string]any{
-			"id":       server.InBoundID,
-			"settings": string(setting),
-		})
-
-		req, _ := http.NewRequest("POST", fmt.Sprintf("%s/panel/api/inbounds/addClient", server.ApiUrl), bytes.NewReader(payload))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Cookie", loginResp.Header.Get("Set-Cookie"))
-
-		resp, err := client.Do(req)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+			fmt.Sprintf("%s/panel/api/clients/add", server.ApiUrl), bytes.NewReader(payload))
 		if err != nil {
-			log.Printf("error registering new peer on server: %s err: %v", server.ID, err)
+			log.Printf("error building request for server %s: %v", server.ID, err)
 			continue
 		}
-		resp.Body.Close()
+		req.Header.Set("Content-Type", "application/json")
+		authorize(req, server)
 
-		if resp.StatusCode != 200 {
-			log.Printf("error registering new peer on server: %s bad status: %s", server.ID, resp.Status)
+		if err := callPanel(&client, req, server); err != nil {
+			log.Printf("error registering new peer: %v", err)
 			continue
 		}
 
@@ -154,8 +177,8 @@ func validateCreateInput(input CreateInput) error {
 		return fmt.Errorf("%w: ip is required", ErrInvalidInput)
 	case strings.TrimSpace(input.ApiUrl) == "":
 		return fmt.Errorf("%w: api_url is required", ErrInvalidInput)
-	case strings.TrimSpace(input.Username) == "":
-		return fmt.Errorf("%w: username is required", ErrInvalidInput)
+	case strings.TrimSpace(input.AuthToken) == "":
+		return fmt.Errorf("%w: auth_token is required", ErrInvalidInput)
 	case input.Port <= 0 || input.Port > 65535:
 		return fmt.Errorf("%w: port must be between 1 and 65535", ErrInvalidInput)
 	case input.MaxClients < 0:
@@ -172,7 +195,7 @@ func (s *service) Create(ctx context.Context, input CreateInput) (Server, error)
 
 	server := Server{
 		Location:   strings.TrimSpace(input.Location),
-		Username:   strings.TrimSpace(input.Username),
+		AuthToken:  strings.TrimSpace(input.AuthToken),
 		Host:       strings.TrimSpace(input.Host),
 		Port:       input.Port,
 		Ip:         strings.TrimSpace(input.Ip),
@@ -203,8 +226,11 @@ func (s *service) Update(ctx context.Context, serverID string, input UpdateInput
 		}
 		fields["location"] = location
 	}
-	if input.Username != nil {
-		fields["username"] = strings.TrimSpace(*input.Username)
+
+	if input.AuthToken != nil {
+		if token := strings.TrimSpace(*input.AuthToken); token != "" {
+			fields["auth_token"] = token
+		}
 	}
 	if input.Host != nil {
 		fields["host"] = strings.TrimSpace(*input.Host)
@@ -248,9 +274,12 @@ func (s *service) Delete(ctx context.Context, serverID string) error {
 	return s.store.Delete(ctx, serverID)
 }
 
-const healthCheckTimeout = 7 * time.Second
+const (
+	healthCheckTimeout = 7 * time.Second
 
-// CheckHealth логинится в панель сервера и сообщает, отвечает ли она.
+	panelRequestTimeout = 15 * time.Second
+)
+
 func (s *service) CheckHealth(ctx context.Context, serverID string) (Health, error) {
 	server, err := s.store.GetByID(ctx, serverID)
 	if err != nil {
@@ -260,7 +289,6 @@ func (s *service) CheckHealth(ctx context.Context, serverID string) (Health, err
 	return s.checkServer(ctx, server), nil
 }
 
-// CheckAllHealth параллельно проверяет все серверы.
 func (s *service) CheckAllHealth(ctx context.Context) ([]Health, error) {
 	servers, err := s.store.GetAll(ctx)
 	if err != nil {
@@ -285,34 +313,28 @@ func (s *service) CheckAllHealth(ctx context.Context) ([]Health, error) {
 func (s *service) checkServer(ctx context.Context, server Server) Health {
 	health := Health{ServerID: server.ID, Location: server.Location}
 
+	if server.AuthToken == "" {
+		health.Error = "auth token is not set"
+		return health
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, healthCheckTimeout)
 	defer cancel()
 
-	form := url.Values{
-		"username": {server.Username},
-		"password": {s.ServerPanelPassword},
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		server.ApiUrl+"/login", strings.NewReader(form.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		fmt.Sprintf("%s/panel/api/inbounds/list", server.ApiUrl), nil)
 	if err != nil {
 		health.Error = "invalid api url"
 		return health
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	authorize(req, server)
 
 	started := time.Now()
-
-	resp, err := (&http.Client{Timeout: healthCheckTimeout}).Do(req)
+	err = callPanel(&http.Client{Timeout: healthCheckTimeout}, req, server)
 	health.LatencyMs = time.Since(started).Milliseconds()
-	if err != nil {
-		health.Error = "panel is unreachable"
-		return health
-	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		health.Error = fmt.Sprintf("panel responded with status %d", resp.StatusCode)
+	if err != nil {
+		health.Error = err.Error()
 		return health
 	}
 
@@ -321,41 +343,39 @@ func (s *service) checkServer(ctx context.Context, server Server) Health {
 	return health
 }
 
-func (s *service) DeletePeerFromServer(ctx context.Context, serverID, UUID string) error {
+func (s *service) DeletePeerFromServer(ctx context.Context, serverID, email string) error {
 	server, err := s.store.GetByID(ctx, serverID)
 	if err != nil {
 		return err
 	}
 
-	client := http.Client{}
+	if server.AuthToken == "" {
+		return fmt.Errorf("%w: server %s has no auth token", ErrInvalidInput, server.ID)
+	}
 
-	loginResp, err := client.PostForm(server.ApiUrl+"/login",
-		map[string][]string{
-			"username": {server.Username},
-			"password": {s.ServerPanelPassword},
-		})
+	if strings.TrimSpace(email) == "" {
+		return fmt.Errorf("%w: client email is required", ErrInvalidInput)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		fmt.Sprintf("%s/panel/api/clients/del/%s", server.ApiUrl, url.PathEscape(email)), nil)
 	if err != nil {
-		return fmt.Errorf("login to server %s: %w", server.ID, err)
+		return fmt.Errorf("delete client on server %s: %w", server.ID, err)
 	}
-	defer loginResp.Body.Close()
-
-	if loginResp.StatusCode != http.StatusOK {
-		return fmt.Errorf("login to server %s failed: status=%s", server.ID, loginResp.Status)
-	}
-
-	req, _ := http.NewRequest("POST", fmt.Sprintf("%s/panel/api/inbounds/%d/delClient/%s", server.ApiUrl, server.InBoundID, UUID), nil)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Cookie", loginResp.Header.Get("Set-Cookie"))
+	authorize(req, server)
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("delClient on server %s: %w", server.ID, err)
-	}
-	defer resp.Body.Close()
+	err = callPanel(&http.Client{Timeout: panelRequestTimeout}, req, server)
 
-	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusNoContent || resp.StatusCode == http.StatusNotFound {
+	if err != nil && isClientMissing(err) {
 		return nil
 	}
 
-	return fmt.Errorf("delClient on server %s failed: status=%s", server.ID, resp.Status)
+	return err
+}
+
+func isClientMissing(err error) bool {
+	msg := strings.ToLower(err.Error())
+
+	return strings.Contains(msg, "not found") || strings.Contains(msg, "no such")
 }

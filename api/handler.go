@@ -51,7 +51,6 @@ type IBot interface {
 	SendSuccessPayment(userID int64) error
 }
 
-// AdminRoutes регистрирует маршруты админ-панели на общем роутере.
 type AdminRoutes interface {
 	RegisterRoutes(router *mux.Router)
 }
@@ -83,8 +82,7 @@ type Deps struct {
 	ApiUrl        string
 	CloudPayments string
 	Apps          config.Apps
-	// Admin необязателен: если панель выключена в конфиге, он равен nil и
-	// маршруты /admin не появляются.
+
 	Admin AdminRoutes
 }
 

@@ -11,7 +11,6 @@ import (
 
 const auditCollection = "admin_audit"
 
-// AuditEntry фиксирует изменяющее действие администратора.
 type AuditEntry struct {
 	ID        string    `bson:"_id,omitempty" json:"id"`
 	Actor     string    `bson:"actor" json:"actor"`
@@ -22,7 +21,6 @@ type AuditEntry struct {
 	CreatedAt time.Time `bson:"created_at" json:"created_at"`
 }
 
-// AuditStore пишет и читает журнал действий администратора.
 type AuditStore struct {
 	db *mongo.Collection
 }
@@ -64,8 +62,6 @@ func (s *AuditStore) List(ctx context.Context, limit, offset int) ([]AuditEntry,
 	return entries, total, nil
 }
 
-// audit пишет запись журнала, не прерывая основной запрос при ошибке записи:
-// провал аудита не должен отменять уже выполненное действие.
 func (h *Handler) audit(ctx context.Context, actor, ip, action, target, details string) {
 	if h.auditStore == nil {
 		return

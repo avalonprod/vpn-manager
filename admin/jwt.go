@@ -17,13 +17,11 @@ var (
 	ErrTokenExpired = errors.New("token expired")
 )
 
-// Claims — полезная нагрузка админского токена. Набор намеренно минимален:
-// в панели ровно один субъект, поэтому ролей и разрешений тут нет.
 type Claims struct {
 	Subject   string `json:"sub"`
 	IssuedAt  int64  `json:"iat"`
 	ExpiresAt int64  `json:"exp"`
-	// TokenID позволяет отличать сессии в журнале аудита.
+
 	TokenID string `json:"jti"`
 }
 
@@ -32,8 +30,6 @@ type jwtHeader struct {
 	Type      string `json:"typ"`
 }
 
-// tokenIssuer выпускает и проверяет HS256-токены. Реализация на stdlib:
-// формат JWT здесь достаточно узкий, чтобы не тянуть внешнюю библиотеку.
 type tokenIssuer struct {
 	secret []byte
 	ttl    time.Duration
@@ -62,15 +58,13 @@ func (t *tokenIssuer) sign(signingInput string) string {
 func newTokenID() string {
 	buf := make([]byte, 12)
 	if _, err := rand.Read(buf); err != nil {
-		// crypto/rand на поддерживаемых платформах не отказывает; если это
-		// всё же случилось, безопаснее выпустить токен без jti, чем упасть.
+
 		return ""
 	}
 
 	return hex.EncodeToString(buf)
 }
 
-// Issue выпускает подписанный токен и возвращает его вместе с claims.
 func (t *tokenIssuer) Issue(subject string) (string, Claims, error) {
 	now := time.Now().UTC()
 
@@ -96,7 +90,6 @@ func (t *tokenIssuer) Issue(subject string) (string, Claims, error) {
 	return signingInput + "." + t.sign(signingInput), claims, nil
 }
 
-// Parse проверяет подпись и срок жизни токена.
 func (t *tokenIssuer) Parse(token string) (Claims, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
@@ -105,7 +98,6 @@ func (t *tokenIssuer) Parse(token string) (Claims, error) {
 
 	signingInput := parts[0] + "." + parts[1]
 
-	// Сравнение подписи — строго constant-time.
 	if !hmac.Equal([]byte(parts[2]), []byte(t.sign(signingInput))) {
 		return Claims{}, ErrInvalidToken
 	}
@@ -120,8 +112,6 @@ func (t *tokenIssuer) Parse(token string) (Claims, error) {
 		return Claims{}, ErrInvalidToken
 	}
 
-	// Алгоритм фиксирован: "alg" из токена не влияет на проверку подписи,
-	// поэтому подмена на none/RS256 невозможна.
 	if header.Algorithm != "HS256" {
 		return Claims{}, ErrInvalidToken
 	}

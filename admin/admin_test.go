@@ -62,7 +62,6 @@ func TestParseRejectsTamperedPayload(t *testing.T) {
 	}
 }
 
-// Токен, подписанный чужим ключом, не должен приниматься.
 func TestParseRejectsForeignSignature(t *testing.T) {
 	token, _, err := newTokenIssuer("ffffffffffffffffffffffffffffffff", time.Hour).Issue("admin")
 	if err != nil {
@@ -74,7 +73,6 @@ func TestParseRejectsForeignSignature(t *testing.T) {
 	}
 }
 
-// Классическая атака alg=none должна отбиваться: подпись проверяется всегда.
 func TestParseRejectsAlgNone(t *testing.T) {
 	header, err := encodeSegment(jwtHeader{Algorithm: "none", Type: "JWT"})
 	if err != nil {
@@ -110,7 +108,6 @@ func TestParseRejectsExpiredToken(t *testing.T) {
 func TestParseRejectsMalformedToken(t *testing.T) {
 	issuer := newTokenIssuer(testSecret, time.Hour)
 
-	// Валидно подписанный, но не-JSON payload не должен проходить.
 	header, _ := encodeSegment(jwtHeader{Algorithm: "HS256", Type: "JWT"})
 	garbage := base64.RawURLEncoding.EncodeToString([]byte("not json"))
 	signed := header + "." + garbage
@@ -170,12 +167,10 @@ func TestAuthenticateLocksOutAfterRepeatedFailures(t *testing.T) {
 		}
 	}
 
-	// После исчерпания попыток блокируется даже верный пароль.
 	if err := auth.Authenticate("3.3.3.3", "root", "s3cret"); err != ErrTooManyAttempts {
 		t.Errorf("err = %v, want ErrTooManyAttempts", err)
 	}
 
-	// Лимит привязан к IP: другой адрес не должен страдать.
 	if err := auth.Authenticate("4.4.4.4", "root", "s3cret"); err != nil {
 		t.Errorf("unrelated ip blocked: %v", err)
 	}
@@ -213,7 +208,6 @@ func TestRateLimiterAllowsBurstThenBlocks(t *testing.T) {
 	}
 }
 
-// Claims сериализуются в стандартные для JWT имена полей.
 func TestClaimsUseStandardJSONNames(t *testing.T) {
 	raw, err := json.Marshal(Claims{Subject: "admin", IssuedAt: 1, ExpiresAt: 2, TokenID: "x"})
 	if err != nil {

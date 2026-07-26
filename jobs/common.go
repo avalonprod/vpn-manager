@@ -10,7 +10,7 @@ type IBot interface {
 }
 
 type IServersService interface {
-	DeletePeerFromServer(ctx context.Context, serverID, UUID string) error
+	DeletePeerFromServer(ctx context.Context, serverID, email string) error
 }
 
 type IPeersService interface {

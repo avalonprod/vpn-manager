@@ -15,7 +15,6 @@ type (
 		TelegramAccessToken  string
 		TelegramWebhookToken string
 		TelegramWebhookPort  string
-		ServerPanelPassword  string
 		ApiUrl               string
 		Port                 string
 		MongoDB              MongoDB
@@ -38,20 +37,19 @@ type (
 		SecretKey string
 		ApiUrl    string
 	}
-	// Admin описывает доступ к админ-панели. Учётка одна и живёт в .env.
+
 	Admin struct {
 		Enabled bool
-		// Username и Password — учётные данные единственного администратора.
+
 		Username string
 		Password string
-		// PasswordSHA256 — hex-представление sha256(пароль). Позволяет не хранить
-		// пароль в открытом виде. Если задано, имеет приоритет над Password.
+
 		PasswordSHA256 string
-		// JWTSecret подписывает access-токены (HS256). Минимум 32 байта.
+
 		JWTSecret string
-		// TokenTTL — время жизни выданного токена.
+
 		TokenTTL time.Duration
-		// AllowedOrigins — белый список Origin для CORS админ-панели.
+
 		AllowedOrigins []string
 	}
 )
@@ -72,7 +70,6 @@ func MustLoad() *Config {
 	cfg.MongoDB.Password = os.Getenv("MONGODB_PASSWORD")
 	cfg.MongoDB.Name = os.Getenv("MONGODB_NAME")
 
-	cfg.ServerPanelPassword = os.Getenv("SERVER_PANEL_PASSWORD")
 	cfg.CloudPayments.PublicID = os.Getenv("CLOUDPAYMENTS_PUBLIC_ID")
 	cfg.CloudPayments.SecretKey = os.Getenv("CLOUDPAYMENTS_SECRET")
 	cfg.CloudPayments.ApiUrl = os.Getenv("CLOUDPAMENTS_API_URL")
@@ -110,8 +107,6 @@ func loadAdmin() Admin {
 		admin.TokenTTL = time.Duration(minutes) * time.Minute
 	}
 
-	// Панель включается только при полностью заданных учётных данных, иначе
-	// маршруты /admin не регистрируются вовсе.
 	if admin.Username == "" || (admin.Password == "" && admin.PasswordSHA256 == "") {
 		log.Print("admin panel is disabled: ADMIN_USERNAME and ADMIN_PASSWORD (or ADMIN_PASSWORD_SHA256) are not set")
 		return Admin{}

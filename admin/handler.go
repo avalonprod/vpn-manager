@@ -33,7 +33,7 @@ type IServersService interface {
 	Count(ctx context.Context) (total int64, active int64, err error)
 	CheckHealth(ctx context.Context, serverID string) (servers.Health, error)
 	CheckAllHealth(ctx context.Context) ([]servers.Health, error)
-	DeletePeerFromServer(ctx context.Context, serverID, UUID string) error
+	DeletePeerFromServer(ctx context.Context, serverID, email string) error
 	RegisterNewPeers(ctx context.Context, userID int64) error
 }
 
@@ -72,7 +72,6 @@ type IPeersService interface {
 	CountByLocation(ctx context.Context) ([]peers.LocationCount, error)
 }
 
-// Handler обслуживает админ-панель: всё под /admin/api/v1.
 type Handler struct {
 	usersService         IUsersService
 	serversService       IServersService
@@ -115,13 +114,10 @@ func NewHandler(cfg config.Admin, deps Deps) *Handler {
 	}
 }
 
-// RegisterRoutes навешивает админские маршруты на переданный роутер.
 func (h *Handler) RegisterRoutes(router *mux.Router) {
 	api := router.PathPrefix("/admin/api/v1").Subrouter()
 	api.Use(h.recoverPanic, securityHeaders, h.cors)
 
-	// Вход ограничен жёстче остальных маршрутов: это единственная точка,
-	// доступная без токена.
 	login := api.Path("/auth/login").Subrouter()
 	login.Use(h.rateLimit(newRateLimiter(0.2, 10)))
 	login.HandleFunc("", h.handleLogin).Methods(http.MethodPost, http.MethodOptions)
@@ -141,8 +137,6 @@ func (h *Handler) RegisterRoutes(router *mux.Router) {
 	protected.HandleFunc("/users/{id}/block", h.handleBlockUser).Methods(http.MethodPost, http.MethodOptions)
 	protected.HandleFunc("/users/{id}/unblock", h.handleUnblockUser).Methods(http.MethodPost, http.MethodOptions)
 
-	// /servers/health объявляется раньше /servers/{id}, иначе "health"
-	// подставился бы в качестве идентификатора.
 	protected.HandleFunc("/servers/health", h.handleServersHealth).Methods(http.MethodGet, http.MethodOptions)
 	protected.HandleFunc("/servers", h.handleListServers).Methods(http.MethodGet, http.MethodOptions)
 	protected.HandleFunc("/servers", h.handleCreateServer).Methods(http.MethodPost, http.MethodOptions)
@@ -186,7 +180,7 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusTooManyRequests, "too many login attempts, try again later")
 		default:
 			h.logger.Warnf("admin: failed login attempt from %s", ip)
-			// Ответ одинаков для неверного логина и неверного пароля.
+
 			writeError(w, http.StatusUnauthorized, "invalid username or password")
 		}
 		return
@@ -221,7 +215,6 @@ func (h *Handler) handleMe(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleRefresh продлевает сессию, не требуя повторного ввода пароля.
 func (h *Handler) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	claims, ok := ClaimsFrom(r.Context())
 	if !ok {

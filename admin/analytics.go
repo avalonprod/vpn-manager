@@ -7,8 +7,6 @@ import (
 	"vpn-manager/plans"
 )
 
-// sortPlanBreakdown задаёт устойчивый порядок: сначала крупные тарифы,
-// при равенстве — по идентификатору, чтобы легенда графика не «прыгала».
 func sortPlanBreakdown(items []planBreakdown) {
 	sort.Slice(items, func(i, j int) bool {
 		if items[i].Subscriptions != items[j].Subscriptions {
@@ -68,7 +66,6 @@ type overviewResponse struct {
 	GeneratedAt    time.Time             `json:"generated_at"`
 }
 
-// percent возвращает долю part от total в процентах, округлённую до сотых.
 func percent(part, total int64) float64 {
 	if total == 0 {
 		return 0
@@ -177,7 +174,7 @@ func (h *Handler) handleOverview(w http.ResponseWriter, r *http.Request) {
 			Total:  serversTotal,
 			Active: serversActive,
 		},
-		// Доля пользователей, у которых сейчас активна платная подписка.
+
 		ConversionRate: percent(subTotals.ActivePaid, userTotals.Total),
 		GeneratedAt:    now,
 	}
@@ -189,7 +186,6 @@ func (h *Handler) handleOverview(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
-// timeseriesPoint — день сводного ряда для графиков дашборда.
 type timeseriesPoint struct {
 	Date          string  `json:"date"`
 	Signups       int64   `json:"signups"`
@@ -198,8 +194,6 @@ type timeseriesPoint struct {
 	Revenue       float64 `json:"revenue"`
 }
 
-// handleTimeseries отдаёт непрерывный ряд по дням: дни без событий тоже
-// присутствуют с нулями, иначе график «схлопывает» простои.
 func (h *Handler) handleTimeseries(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	days := daysParam(r)
@@ -282,7 +276,6 @@ type locationBreakdown struct {
 	Peers    int64  `json:"peers"`
 }
 
-// handleBreakdown отдаёт разрезы для круговых/столбчатых диаграмм.
 func (h *Handler) handleBreakdown(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	days := daysParam(r)
@@ -323,7 +316,7 @@ func (h *Handler) handleBreakdown(w http.ResponseWriter, r *http.Request) {
 
 		title := planByID[planID].Title
 		if title == "" {
-			// Пробный период не является тарифом в коллекции plans.
+
 			title = planID
 		}
 
@@ -348,7 +341,6 @@ func (h *Handler) handleBreakdown(w http.ResponseWriter, r *http.Request) {
 		plansResult = append(plansResult, *item)
 	}
 
-	// Стабильный порядок: сначала по подпискам, при равенстве — по id.
 	sortPlanBreakdown(plansResult)
 
 	locations, err := h.peersService.CountByLocation(ctx)

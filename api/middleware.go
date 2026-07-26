@@ -58,8 +58,6 @@ func (h *Handler) AccessGuard(next http.Handler) http.Handler {
 			return
 		}
 
-		// Блокировка проверяется раньше подписки: заблокированный пользователь
-		// не должен получить конфиги даже с оплаченной подпиской.
 		blocked, err := h.usersService.IsBlocked(r.Context(), userID)
 		if err != nil {
 			h.logger.Errorf("%s: failed to check block status for user_id: %d error: %w", op, userID, err)

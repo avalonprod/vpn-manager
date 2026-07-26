@@ -42,38 +42,3 @@ func NewScheduler(subscriptionsService ISubscriptionsService, peersService IPeer
 		logger:               logger,
 	}
 }
-
-// func (s *Scheduler) CheckExpiredSubscriptions(ctx context.Context) {
-// 	subs, err := s.subscriptionsService.GetExpiredSubscriptions(ctx)
-// 	if err != nil {
-// 		s.logger.Errorf("failed to get expired subs: %v", err)
-// 		return
-// 	}
-
-// 	for _, sub := range subs {
-// 		peers, err := s.peersService.GetPeersByUserID(ctx, sub.UserID)
-// 		if err != nil {
-// 			s.logger.Errorf("failed to get peers: %v", err)
-// 		}
-
-// 		for _, peer := range peers {
-// 			if err := s.serversService.DeletePeerFromServer(ctx, peer.ServerID, peer.PublicKey); err != nil {
-// 				s.logger.Errorf("failed to delete peer from server for user %d err: %v", sub.UserID, err)
-// 				continue
-// 			}
-// 		}
-
-// 		if err := s.peersService.DeletePeersByUserID(ctx, sub.UserID); err != nil {
-// 			s.logger.Errorf("failed to delete peer for user %d err: %v", sub.UserID, err)
-// 		}
-
-// 		err = s.notifier.Notify(ctx, sub.UserID, "Ваша подписка истекла пожалуйста продлите подписку чтобы продолжить использовать наш VPN сервис")
-// 		if err != nil {
-// 			s.logger.Errorf("failed to notify user: %d err: %v", sub.UserID, err)
-// 		}
-// 	}
-
-// 	if err := s.subscriptionsService.DeactivateExpiredSubscriptions(ctx); err != nil {
-// 		s.logger.Errorf("failed to deactivate expired subs: %v", err)
-// 	}
-// }

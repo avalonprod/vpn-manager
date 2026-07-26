@@ -168,8 +168,6 @@ func (s *store) CountByStatus(ctx context.Context, status string) (int64, error)
 	return s.db.CountDocuments(ctx, filter)
 }
 
-// planLookup подтягивает цену тарифа к счёту: invoices.plan_id — строка,
-// как и plans._id, поэтому $lookup работает напрямую.
 var planLookup = bson.D{{Key: "$lookup", Value: bson.M{
 	"from":         "plans",
 	"localField":   "plan_id",
@@ -179,8 +177,6 @@ var planLookup = bson.D{{Key: "$lookup", Value: bson.M{
 
 var planPrice = bson.M{"$ifNull": bson.A{bson.M{"$arrayElemAt": bson.A{"$plan.price", 0}}, 0}}
 
-// RevenueSince считает суммарную выручку по оплаченным счетам с момента since.
-// Нулевое время означает «за всё время».
 func (s *store) RevenueSince(ctx context.Context, since time.Time) (float64, error) {
 	match := bson.M{"status": StatusCompleted}
 	if !since.IsZero() {
@@ -216,7 +212,6 @@ func (s *store) RevenueSince(ctx context.Context, since time.Time) (float64, err
 	return result[0].Revenue, nil
 }
 
-// RevenueByDay строит временной ряд выручки по дням в UTC начиная с since.
 func (s *store) RevenueByDay(ctx context.Context, since time.Time) ([]DailyRevenue, error) {
 	pipeline := mongo.Pipeline{
 		{{Key: "$match", Value: bson.M{
@@ -250,7 +245,6 @@ func (s *store) RevenueByDay(ctx context.Context, since time.Time) ([]DailyReven
 	return result, nil
 }
 
-// RevenueByPlan разбивает выручку по тарифам за период с since.
 func (s *store) RevenueByPlan(ctx context.Context, since time.Time) ([]PlanRevenue, error) {
 	match := bson.M{"status": StatusCompleted}
 	if !since.IsZero() {

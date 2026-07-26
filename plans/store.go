@@ -25,7 +25,6 @@ func (s *store) GetAll(ctx context.Context) ([]Plan, error) {
 	return s.find(ctx, bson.M{"is_active": true})
 }
 
-// GetAllIncludingInactive возвращает и выключенные тарифы — для админ-панели.
 func (s *store) GetAllIncludingInactive(ctx context.Context) ([]Plan, error) {
 	return s.find(ctx, bson.M{})
 }

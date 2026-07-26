@@ -17,7 +17,6 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
-// page — обёртка постраничного ответа.
 type page[T any] struct {
 	Items  []T   `json:"items"`
 	Total  int64 `json:"total"`
@@ -40,8 +39,6 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, errorResponse{Error: message})
 }
 
-// decodeJSON читает тело запроса строго: неизвестные поля отвергаются, чтобы
-// опечатка в клиенте не проходила молча.
 func decodeJSON(r *http.Request, dst any) error {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -53,7 +50,6 @@ func decodeJSON(r *http.Request, dst any) error {
 	return nil
 }
 
-// pagination разбирает limit/offset с безопасными значениями по умолчанию.
 func pagination(r *http.Request) (limit, offset int) {
 	query := r.URL.Query()
 
@@ -73,7 +69,6 @@ func pagination(r *http.Request) (limit, offset int) {
 	return limit, offset
 }
 
-// daysParam разбирает окно аналитики в днях (по умолчанию 30, максимум 365).
 func daysParam(r *http.Request) int {
 	days := 30
 
@@ -90,5 +85,4 @@ func userIDParam(raw string) (int64, error) {
 	return strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
 }
 
-// errNotFound помечает ошибки, которые должны стать 404 вместо 500.
 var errNotFound = errors.New("not found")

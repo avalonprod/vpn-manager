@@ -19,8 +19,6 @@ import (
 	"github.com/gorilla/mux"
 )
 
-// ---- заглушки сервисов -----------------------------------------------------
-
 type stubUsers struct {
 	blockedCalls []struct {
 		userID  int64
@@ -55,7 +53,10 @@ func (s *stubUsers) SignupsByDay(context.Context, time.Time) ([]users.DailyCount
 	return []users.DailyCount{}, nil
 }
 
-type stubServers struct{ healthCalled bool }
+type stubServers struct {
+	healthCalled  bool
+	deletedClient []string
+}
 
 func (s *stubServers) GetAll(context.Context) ([]servers.Server, error) {
 	return []servers.Server{}, nil
@@ -64,7 +65,6 @@ func (s *stubServers) GetByID(context.Context, string) (servers.Server, error) {
 	return servers.Server{}, servers.ErrServerNotFound
 }
 
-// Create повторяет контракт настоящего сервиса: пустая локация — ErrInvalidInput.
 func (s *stubServers) Create(_ context.Context, input servers.CreateInput) (servers.Server, error) {
 	if input.Location == "" {
 		return servers.Server{}, servers.ErrInvalidInput
@@ -86,8 +86,11 @@ func (s *stubServers) CheckAllHealth(context.Context) ([]servers.Health, error) 
 	s.healthCalled = true
 	return []servers.Health{}, nil
 }
-func (s *stubServers) DeletePeerFromServer(context.Context, string, string) error { return nil }
-func (s *stubServers) RegisterNewPeers(context.Context, int64) error              { return nil }
+func (s *stubServers) DeletePeerFromServer(_ context.Context, _, email string) error {
+	s.deletedClient = append(s.deletedClient, email)
+	return nil
+}
+func (s *stubServers) RegisterNewPeers(context.Context, int64) error { return nil }
 
 type stubPlans struct{}
 
@@ -149,6 +152,7 @@ func (s *stubPeers) GetPeerByUserID(context.Context, int64) (peers.Peer, error) 
 	return peers.Peer{
 		UserID: 1,
 		UUID:   "uuid-1",
+		Email:  "abc1234",
 		Subs:   []peers.Sub{{Location: "AMS", ServerID: "srv1", Enabled: true}},
 	}, nil
 }
@@ -177,8 +181,6 @@ func (nopLogger) Warn(...any)           {}
 func (nopLogger) Warnf(string, ...any)  {}
 func (nopLogger) Error(...any)          {}
 func (nopLogger) Errorf(string, ...any) {}
-
-// ---- фикстура --------------------------------------------------------------
 
 type fixture struct {
 	router  *mux.Router
@@ -262,8 +264,6 @@ func (f *fixture) login(t *testing.T) string {
 	return response.Token
 }
 
-// ---- тесты -----------------------------------------------------------------
-
 func TestLoginRejectsWrongPassword(t *testing.T) {
 	f := newFixture(t)
 
@@ -273,7 +273,6 @@ func TestLoginRejectsWrongPassword(t *testing.T) {
 		t.Errorf("status = %d, want 401", rec.Code)
 	}
 
-	// Сообщение не должно подсказывать, какая половина пары неверна.
 	if body := rec.Body.String(); !strings.Contains(body, "invalid username or password") {
 		t.Errorf("body = %s, want a generic credentials error", body)
 	}
@@ -305,7 +304,6 @@ func TestProtectedRoutesRejectTamperedToken(t *testing.T) {
 	f := newFixture(t)
 	token := f.login(t)
 
-	// Меняем последний символ подписи.
 	tampered := token[:len(token)-1] + map[bool]string{true: "A", false: "B"}[strings.HasSuffix(token, "B")]
 
 	rec := f.do(t, http.MethodGet, "/admin/api/v1/analytics/overview", tampered, "")
@@ -335,13 +333,11 @@ func TestOverviewReturnsAggregatedNumbers(t *testing.T) {
 		t.Errorf("servers.active = %d, want 1", response.Servers.Active)
 	}
 
-	// ARPU = 100 / 10 пользователей.
 	if response.Revenue.ARPU != 10 {
 		t.Errorf("revenue.arpu = %v, want 10", response.Revenue.ARPU)
 	}
 }
 
-// Блокировка обязана не только пометить пользователя, но и отозвать доступ.
 func TestBlockUserRevokesAccess(t *testing.T) {
 	f := newFixture(t)
 
@@ -361,6 +357,10 @@ func TestBlockUserRevokesAccess(t *testing.T) {
 
 	if len(f.peers.deactivated) != 1 || f.peers.deactivated[0] != 1 {
 		t.Errorf("deactivated peers = %v, want [1]", f.peers.deactivated)
+	}
+
+	if len(f.servers.deletedClient) != 1 || f.servers.deletedClient[0] != "abc1234" {
+		t.Errorf("deleted clients = %v, want [abc1234]", f.servers.deletedClient)
 	}
 }
 
@@ -386,7 +386,6 @@ func TestInvalidUserIDIsRejected(t *testing.T) {
 	}
 }
 
-// /servers/health не должен попадать в обработчик /servers/{id}.
 func TestServersHealthRouteWinsOverIDRoute(t *testing.T) {
 	f := newFixture(t)
 
@@ -400,19 +399,18 @@ func TestServersHealthRouteWinsOverIDRoute(t *testing.T) {
 	}
 }
 
-// Ошибка валидации из сервиса должна становиться 400, а не 500.
 func TestCreateServerMapsValidationErrorTo400(t *testing.T) {
 	f := newFixture(t)
 	token := f.login(t)
 
 	rec := f.do(t, http.MethodPost, "/admin/api/v1/servers", token,
-		`{"location":"","ip":"1.2.3.4","api_url":"http://x","username":"u","port":443}`)
+		`{"location":"","ip":"1.2.3.4","api_url":"http://x","auth_token":"t","port":443}`)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400, body = %s", rec.Code, rec.Body)
 	}
 
 	rec = f.do(t, http.MethodPost, "/admin/api/v1/servers", token,
-		`{"location":"AMS","ip":"1.2.3.4","api_url":"http://x","username":"u","port":443,"inbound_id":1,"is_active":true}`)
+		`{"location":"AMS","ip":"1.2.3.4","api_url":"http://x","auth_token":"t","port":443,"inbound_id":1,"is_active":true}`)
 	if rec.Code != http.StatusCreated {
 		t.Errorf("status = %d, want 201, body = %s", rec.Code, rec.Body)
 	}
@@ -422,7 +420,7 @@ func TestUnknownFieldsAreRejected(t *testing.T) {
 	f := newFixture(t)
 
 	rec := f.do(t, http.MethodPost, "/admin/api/v1/servers", f.login(t),
-		`{"location":"AMS","ip":"1.2.3.4","api_url":"http://x","username":"u","port":443,"typo_field":1}`)
+		`{"location":"AMS","ip":"1.2.3.4","api_url":"http://x","auth_token":"t","port":443,"typo_field":1}`)
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", rec.Code)
 	}

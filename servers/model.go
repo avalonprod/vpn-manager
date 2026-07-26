@@ -7,9 +7,10 @@ type Security struct {
 }
 
 type Server struct {
-	ID         string   `bson:"_id,omitempty"`
-	Location   string   `bson:"location"`
-	Username   string   `bson:"username"`
+	ID       string `bson:"_id,omitempty"`
+	Location string `bson:"location"`
+
+	AuthToken  string   `bson:"auth_token"`
 	Host       string   `bson:"host"`
 	Port       int      `bson:"port"`
 	Ip         string   `bson:"ip"`
@@ -20,10 +21,9 @@ type Server struct {
 	Security   Security `bson:"security"`
 }
 
-// CreateInput — параметры создания сервера из админ-панели.
 type CreateInput struct {
 	Location   string
-	Username   string
+	AuthToken  string
 	Host       string
 	Port       int
 	Ip         string
@@ -34,10 +34,9 @@ type CreateInput struct {
 	Security   Security
 }
 
-// UpdateInput — частичное обновление сервера: применяются только не-nil поля.
 type UpdateInput struct {
 	Location   *string
-	Username   *string
+	AuthToken  *string
 	Host       *string
 	Port       *int
 	Ip         *string
@@ -48,7 +47,6 @@ type UpdateInput struct {
 	Security   *Security
 }
 
-// Health — результат проверки доступности панели сервера.
 type Health struct {
 	ServerID  string `json:"server_id"`
 	Location  string `json:"location"`

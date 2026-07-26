@@ -194,8 +194,6 @@ func (s *service) GetSubscriptionsForUsers(ctx context.Context, userIDs []int64)
 	return s.store.GetSubscriptionsForUsers(ctx, userIDs)
 }
 
-// Deactivate снимает активность с подписки пользователя — используется при
-// блокировке пользователя из админ-панели.
 func (s *service) Deactivate(ctx context.Context, userID int64) error {
 	sub, err := s.store.GetByUserID(ctx, userID)
 	if err != nil {

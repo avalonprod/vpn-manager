@@ -23,31 +23,32 @@ func (s securityPayload) toDomain() servers.Security {
 }
 
 type serverResponse struct {
-	ID         string          `json:"id"`
-	Location   string          `json:"location"`
-	Username   string          `json:"username"`
-	Host       string          `json:"host"`
-	Port       int             `json:"port"`
-	IP         string          `json:"ip"`
-	ApiUrl     string          `json:"api_url"`
-	InBoundID  int             `json:"inbound_id"`
-	MaxClients int             `json:"max_clients"`
-	IsActive   bool            `json:"is_active"`
-	Security   securityPayload `json:"security"`
+	ID       string `json:"id"`
+	Location string `json:"location"`
+
+	HasAuthToken bool            `json:"has_auth_token"`
+	Host         string          `json:"host"`
+	Port         int             `json:"port"`
+	IP           string          `json:"ip"`
+	ApiUrl       string          `json:"api_url"`
+	InBoundID    int             `json:"inbound_id"`
+	MaxClients   int             `json:"max_clients"`
+	IsActive     bool            `json:"is_active"`
+	Security     securityPayload `json:"security"`
 }
 
 func toServerResponse(server servers.Server) serverResponse {
 	return serverResponse{
-		ID:         server.ID,
-		Location:   server.Location,
-		Username:   server.Username,
-		Host:       server.Host,
-		Port:       server.Port,
-		IP:         server.Ip,
-		ApiUrl:     server.ApiUrl,
-		InBoundID:  server.InBoundID,
-		MaxClients: server.MaxClients,
-		IsActive:   server.IsActive,
+		ID:           server.ID,
+		Location:     server.Location,
+		HasAuthToken: server.AuthToken != "",
+		Host:         server.Host,
+		Port:         server.Port,
+		IP:           server.Ip,
+		ApiUrl:       server.ApiUrl,
+		InBoundID:    server.InBoundID,
+		MaxClients:   server.MaxClients,
+		IsActive:     server.IsActive,
 		Security: securityPayload{
 			PublicKey: server.Security.PublicKey,
 			ShortID:   server.Security.ShortID,
@@ -64,7 +65,6 @@ func (h *Handler) handleListServers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Показываем, сколько активных подключений приходится на каждую локацию.
 	loadByLocation := map[string]int64{}
 	if counts, err := h.peersService.CountByLocation(r.Context()); err == nil {
 		for _, c := range counts {
@@ -92,7 +92,7 @@ func (h *Handler) handleListServers(w http.ResponseWriter, r *http.Request) {
 
 type createServerRequest struct {
 	Location   string          `json:"location"`
-	Username   string          `json:"username"`
+	AuthToken  string          `json:"auth_token"`
 	Host       string          `json:"host"`
 	Port       int             `json:"port"`
 	IP         string          `json:"ip"`
@@ -112,7 +112,7 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 
 	server, err := h.serversService.Create(r.Context(), servers.CreateInput{
 		Location:   req.Location,
-		Username:   req.Username,
+		AuthToken:  req.AuthToken,
 		Host:       req.Host,
 		Port:       req.Port,
 		Ip:         req.IP,
@@ -139,8 +139,9 @@ func (h *Handler) handleCreateServer(w http.ResponseWriter, r *http.Request) {
 }
 
 type updateServerRequest struct {
-	Location   *string          `json:"location"`
-	Username   *string          `json:"username"`
+	Location *string `json:"location"`
+
+	AuthToken  *string          `json:"auth_token"`
 	Host       *string          `json:"host"`
 	Port       *int             `json:"port"`
 	IP         *string          `json:"ip"`
@@ -162,7 +163,7 @@ func (h *Handler) handleUpdateServer(w http.ResponseWriter, r *http.Request) {
 
 	input := servers.UpdateInput{
 		Location:   req.Location,
-		Username:   req.Username,
+		AuthToken:  req.AuthToken,
 		Host:       req.Host,
 		Port:       req.Port,
 		Ip:         req.IP,

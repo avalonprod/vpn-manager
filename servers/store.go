@@ -25,7 +25,6 @@ func (s *store) GetAllActiveServers(ctx context.Context) ([]Server, error) {
 	return s.find(ctx, bson.M{"is_active": true})
 }
 
-// GetAll возвращает все серверы, включая выключенные, — для админ-панели.
 func (s *store) GetAll(ctx context.Context) ([]Server, error) {
 	return s.find(ctx, bson.M{})
 }

@@ -17,15 +17,11 @@ var (
 )
 
 const (
-	// maxLoginAttempts — сколько неудачных попыток допускается с одного IP
-	// внутри окна, прежде чем вход блокируется.
 	maxLoginAttempts = 5
 	loginWindow      = 15 * time.Minute
 	lockoutDuration  = 15 * time.Minute
 )
 
-// authenticator проверяет единственную админскую учётку из .env и защищает
-// вход от перебора.
 type authenticator struct {
 	username     []byte
 	passwordHash []byte
@@ -33,8 +29,7 @@ type authenticator struct {
 }
 
 func newAuthenticator(cfg config.Admin) *authenticator {
-	// Пароль всегда сводим к sha256, чтобы сравнение шло по буферам
-	// одинаковой длины и не давало утечки по времени.
+
 	passwordHash := sha256.Sum256([]byte(cfg.Password))
 	hash := passwordHash[:]
 
@@ -53,8 +48,6 @@ func newAuthenticator(cfg config.Admin) *authenticator {
 	}
 }
 
-// Authenticate сверяет логин и пароль. Оба сравнения выполняются всегда,
-// чтобы по времени ответа нельзя было определить, верен ли логин.
 func (a *authenticator) Authenticate(ip, username, password string) error {
 	if !a.limiter.Allow(ip) {
 		return ErrTooManyAttempts
@@ -82,7 +75,6 @@ type attemptState struct {
 	lockedUntil time.Time
 }
 
-// loginLimiter — потокобезопасный счётчик неудачных входов по IP.
 type loginLimiter struct {
 	mu       sync.Mutex
 	attempts map[string]*attemptState
@@ -133,8 +125,6 @@ func (l *loginLimiter) Reset(ip string) {
 	delete(l.attempts, ip)
 }
 
-// evictLocked выбрасывает записи, которые уже не влияют на решения, — иначе
-// карта росла бы неограниченно на каждый новый IP.
 func (l *loginLimiter) evictLocked() {
 	now := time.Now().UTC()
 

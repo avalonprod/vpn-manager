@@ -6,8 +6,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 )
 
-// Строка поиска приходит от администратора и попадает в $regex — спецсимволы
-// обязаны экранироваться, иначе ввод становится regex-инъекцией.
 func TestBuildListFilterEscapesSearchInput(t *testing.T) {
 	filter := buildListFilter(ListFilter{Search: "a.*b("})
 
@@ -34,7 +32,6 @@ func TestBuildListFilterEscapesSearchInput(t *testing.T) {
 	}
 }
 
-// Числовая строка должна дополнительно искать точное совпадение по ID.
 func TestBuildListFilterMatchesNumericIDs(t *testing.T) {
 	filter := buildListFilter(ListFilter{Search: "12345"})
 
@@ -67,8 +64,6 @@ func TestBuildListFilterAppliesBlockedFilter(t *testing.T) {
 	}
 }
 
-// Поле сортировки приходит из query-параметра: неизвестное значение должно
-// откатываться к безопасному умолчанию, а не уходить в запрос как есть.
 func TestAllowedSortFieldsAreWhitelisted(t *testing.T) {
 	if _, ok := allowedSortFields["created_at"]; !ok {
 		t.Error("created_at must be an allowed sort field")

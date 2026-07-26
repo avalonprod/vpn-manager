@@ -46,7 +46,6 @@ func (h *Handler) handleListPlans(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Дополняем тариф числом активных подписок — так видно, что удалять нельзя.
 	subsByPlan := map[string]int64{}
 	if counts, err := h.subscriptionsService.CountByPlan(r.Context()); err == nil {
 		for _, c := range counts {
@@ -166,8 +165,6 @@ func (h *Handler) handleUpdatePlan(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toPlanResponse(plan))
 }
 
-// handleDeletePlan запрещает удалять тариф, на котором висят активные
-// подписки: иначе продления и счета остались бы без цены.
 func (h *Handler) handleDeletePlan(w http.ResponseWriter, r *http.Request) {
 	planID := mux.Vars(r)["id"]
 

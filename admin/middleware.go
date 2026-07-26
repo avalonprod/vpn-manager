@@ -14,20 +14,13 @@ type contextKey string
 
 const claimsContextKey contextKey = "admin_claims"
 
-// maxBodySize ограничивает размер тела запроса: админские payload'ы мелкие,
-// а лимит закрывает тривиальный вектор исчерпания памяти.
-const maxBodySize = 1 << 20 // 1 MiB
+const maxBodySize = 1 << 20
 
-// ClaimsFrom достаёт claims авторизованного администратора из контекста.
 func ClaimsFrom(ctx context.Context) (Claims, bool) {
 	claims, ok := ctx.Value(claimsContextKey).(Claims)
 	return claims, ok
 }
 
-// authGuard пропускает только запросы с валидным Bearer-токеном.
-//
-// Токен принимается исключительно из заголовка Authorization — не из cookie,
-// поэтому браузер не подставляет его автоматически и CSRF here невозможен.
 func (h *Handler) authGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		header := r.Header.Get("Authorization")
@@ -54,7 +47,6 @@ func (h *Handler) authGuard(next http.Handler) http.Handler {
 	})
 }
 
-// cors отвечает только тем Origin, которые перечислены в ADMIN_CORS_ORIGINS.
 func (h *Handler) cors(next http.Handler) http.Handler {
 	allowed := make(map[string]struct{}, len(h.allowedOrigins))
 	for _, origin := range h.allowedOrigins {
@@ -69,7 +61,7 @@ func (h *Handler) cors(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 			w.Header().Set("Access-Control-Max-Age", "600")
-			// Ответ зависит от Origin — иначе кэш отдаст чужие заголовки.
+
 			w.Header().Add("Vary", "Origin")
 		}
 
@@ -82,7 +74,6 @@ func (h *Handler) cors(next http.Handler) http.Handler {
 	})
 }
 
-// securityHeaders выставляет защитные заголовки и ограничивает тело запроса.
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -96,8 +87,6 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-// recoverPanic не даёт панике в обработчике уронить весь сервис и не
-// возвращает наружу подробности ошибки.
 func (h *Handler) recoverPanic(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
@@ -111,7 +100,6 @@ func (h *Handler) recoverPanic(next http.Handler) http.Handler {
 	})
 }
 
-// rateLimiter — token bucket на IP, общий для всех админских маршрутов.
 type rateLimiter struct {
 	mu      sync.Mutex
 	buckets map[string]*bucket
@@ -157,7 +145,6 @@ func (l *rateLimiter) Allow(ip string) bool {
 	return true
 }
 
-// evictLocked чистит корзины, которые давно полны и ничего не ограничивают.
 func (l *rateLimiter) evictLocked(now time.Time) {
 	if len(l.buckets) < 1024 {
 		return
@@ -183,9 +170,6 @@ func (h *Handler) rateLimit(limiter *rateLimiter) func(http.Handler) http.Handle
 	}
 }
 
-// clientIP определяет адрес клиента. X-Forwarded-For учитывается только когда
-// сервис явно запущен за доверенным прокси: иначе заголовок подделывается и
-// обходит лимиты.
 func clientIP(r *http.Request) string {
 	if trustProxyHeaders {
 		if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
@@ -208,10 +192,8 @@ func clientIP(r *http.Request) string {
 	return host
 }
 
-// trustProxyHeaders включается переменной окружения ADMIN_TRUST_PROXY=true.
 var trustProxyHeaders bool
 
-// SetTrustProxyHeaders задаёт, доверять ли заголовкам прокси при определении IP.
 func SetTrustProxyHeaders(trust bool) {
 	trustProxyHeaders = trust
 }

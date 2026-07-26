@@ -38,14 +38,7 @@ func main() {
 
 	pref := telebot.Settings{
 		Token: "7597686428:AAEP_D5vzwuRjprtNKZ_jeQC7Fzx7mz-Bv4",
-		// Poller: &telebot.Webhook{
-		// Listen:           fmt.Sprintf(":%s", cfg.TelegramWebhookPort),
-		// SecretToken:      cfg.TelegramWebhookToken,
-		// IgnoreSetWebhook: true,
-		// Endpoint: &telebot.WebhookEndpoint{
-		// 	PublicURL: fmt.Sprintf("%s/webhook", cfg.ApiUrl),
-		// },
-		// },
+
 		ParseMode: telebot.ModeHTML,
 	}
 
@@ -65,7 +58,7 @@ func main() {
 
 	usersService := users.NewService(users.NewStore(mongodb))
 	peersService := peers.NewService(peers.NewStore(mongodb))
-	serversService := servers.NewService(servers.NewStore(mongodb), peersService, cfg.ServerPanelPassword, cfg.ApiUrl)
+	serversService := servers.NewService(servers.NewStore(mongodb), peersService, cfg.ApiUrl)
 	plansService := plans.NewService(plans.NewStore(mongodb))
 	paymentsService := payments.NewService(payments.NewStore(mongodb), plansService,
 		payments.CloudPaymentsConfig{
@@ -78,7 +71,6 @@ func main() {
 	stackStore := bot.NewStackScreens(mongodb)
 	bot := bot.NewBot(b, *stackStore, logger, usersService, serversService, peersService, plansService, subscriptionsService, tasksService, cfg.ApiUrl)
 
-	// Админ-панель поднимается только при заданных учётных данных в .env.
 	var adminHandler api.AdminRoutes
 	if cfg.Admin.Enabled {
 		admin.SetTrustProxyHeaders(os.Getenv("ADMIN_TRUST_PROXY") == "true")
@@ -114,7 +106,6 @@ func main() {
 		Port: cfg.Port,
 	}, handler.RegisterRoutes())
 
-	// Tasks ===============================
 	var trialNudgeHandler = func(ctx context.Context, t tasks.Task) error {
 		sub, err := subscriptionsService.GetByUserID(ctx, t.UserID)
 		if err == nil && sub.ID != "" {
@@ -170,13 +161,9 @@ func main() {
 	})
 
 	go runner.Run(ctx, 1)
-	// ===============================
 
 	go jobs.RunDisableExpiredAccess(ctx, subscriptionsService, peersService, serversService, bot, logger)
 
-	// Ошибку старта HTTP-сервера нельзя терять: при занятом порте процесс иначе
-	// продолжает работать без API, а клиенты получают connection refused без
-	// каких-либо следов в логах.
 	go func() {
 		if err := srv.Run(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("http server stopped: %v", err)

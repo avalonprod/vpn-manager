@@ -49,7 +49,7 @@ func (s *service) Register(ctx context.Context, input CreateUserInput) error {
 
 	err := s.store.Create(ctx, user)
 	if errors.Is(err, ErrUserAlreadyExists) {
-		// Уже знакомый пользователь — просто отмечаем активность.
+
 		return s.store.TouchLastActive(ctx, input.ID)
 	}
 
@@ -82,8 +82,6 @@ func (s *service) SetBlocked(ctx context.Context, userID int64, blocked bool, re
 	return s.store.SetBlocked(ctx, userID, blocked, reason)
 }
 
-// IsBlocked возвращает true только для существующего заблокированного
-// пользователя: неизвестный ID не считается заблокированным.
 func (s *service) IsBlocked(ctx context.Context, userID int64) (bool, error) {
 	user, err := s.store.GetByID(ctx, userID)
 	if err != nil {

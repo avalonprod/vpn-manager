@@ -80,8 +80,6 @@ func (s *store) CountUsers(ctx context.Context) (int64, error) {
 	return count, nil
 }
 
-// buildListFilter превращает ListFilter в bson-запрос. Пользовательский ввод
-// экранируется, чтобы строка поиска не могла стать regex-инъекцией.
 func buildListFilter(f ListFilter) bson.M {
 	filter := bson.M{}
 
@@ -189,7 +187,6 @@ func (s *store) TouchLastActive(ctx context.Context, userID int64) error {
 	return err
 }
 
-// SignupsByDay возвращает число регистраций по дням в UTC начиная с since.
 func (s *store) SignupsByDay(ctx context.Context, since time.Time) ([]DailyCount, error) {
 	pipeline := mongo.Pipeline{
 		{{Key: "$match", Value: bson.M{"created_at": bson.M{"$gte": since}}}},
@@ -218,7 +215,6 @@ func (s *store) SignupsByDay(ctx context.Context, since time.Time) ([]DailyCount
 	return result, nil
 }
 
-// GetManyByIDs отдаёт пользователей по списку ID одним запросом.
 func (s *store) GetManyByIDs(ctx context.Context, ids []int64) (map[int64]User, error) {
 	if len(ids) == 0 {
 		return map[int64]User{}, nil

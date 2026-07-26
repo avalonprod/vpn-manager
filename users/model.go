@@ -15,7 +15,6 @@ type User struct {
 	BlockedAt    time.Time `bson:"blocked_at,omitempty"`
 }
 
-// BlockedFilter задаёт, по какому признаку блокировки фильтровать выборку.
 type BlockedFilter string
 
 const (
@@ -24,25 +23,21 @@ const (
 	BlockedExclude BlockedFilter = "active"
 )
 
-// ListFilter описывает выборку пользователей для админ-панели.
 type ListFilter struct {
-	// Search ищет по username, first_name и по ID (если строка — число).
 	Search  string
 	Blocked BlockedFilter
-	// SortField: created_at | last_active | id. SortAsc задаёт направление.
+
 	SortField string
 	SortAsc   bool
 	Limit     int
 	Offset    int
 }
 
-// DailyCount — одна точка временного ряда «сколько за день».
 type DailyCount struct {
 	Date  string `bson:"_id" json:"date"`
 	Count int64  `bson:"count" json:"count"`
 }
 
-// Totals — сводные счётчики по пользователям.
 type Totals struct {
 	Total    int64 `json:"total"`
 	Blocked  int64 `json:"blocked"`

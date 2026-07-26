@@ -251,7 +251,6 @@ func (s *store) Totals(ctx context.Context) (Totals, error) {
 	return totals, nil
 }
 
-// CountByPlan показывает распределение активных подписок по тарифам.
 func (s *store) CountByPlan(ctx context.Context) ([]PlanCount, error) {
 	pipeline := mongo.Pipeline{
 		{{Key: "$match", Value: bson.M{"active": true}}},
@@ -273,7 +272,6 @@ func (s *store) CountByPlan(ctx context.Context) ([]PlanCount, error) {
 	return result, nil
 }
 
-// CreatedByDay возвращает число новых подписок по дням в UTC начиная с since.
 func (s *store) CreatedByDay(ctx context.Context, since time.Time, trialOnly *bool) ([]DailyCount, error) {
 	match := bson.M{"created_at": bson.M{"$gte": since}}
 	if trialOnly != nil {
@@ -311,7 +309,6 @@ func (s *store) CreatedByDay(ctx context.Context, since time.Time, trialOnly *bo
 	return result, nil
 }
 
-// List отдаёт подписки постранично, свежие сверху.
 func (s *store) List(ctx context.Context, activeOnly bool, limit, offset int) ([]Subscription, int64, error) {
 	filter := bson.M{}
 	if activeOnly {

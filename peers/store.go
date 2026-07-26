@@ -153,7 +153,6 @@ func (s *store) Totals(ctx context.Context) (Totals, error) {
 	return totals, nil
 }
 
-// CountByLocation считает активные пиры в разрезе локаций серверов.
 func (s *store) CountByLocation(ctx context.Context) ([]LocationCount, error) {
 	pipeline := mongo.Pipeline{
 		{{Key: "$match", Value: bson.M{"is_active": true}}},

@@ -25,7 +25,6 @@ type userSummary struct {
 	BlockReason  string     `json:"block_reason,omitempty"`
 	BlockedAt    *time.Time `json:"blocked_at,omitempty"`
 
-	// Поля ниже сводят подписку и подключение в одну строку таблицы.
 	SubscriptionActive bool       `json:"subscription_active"`
 	SubscriptionTrial  bool       `json:"subscription_trial"`
 	PlanID             string     `json:"plan_id,omitempty"`
@@ -92,7 +91,6 @@ func (h *Handler) handleListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Подписки и пиры подтягиваем пакетно, чтобы не делать запрос на строку.
 	ids := make([]int64, 0, len(list))
 	for _, user := range list {
 		ids = append(ids, user.ID)
@@ -232,7 +230,6 @@ func (h *Handler) handleGetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Цены берём из тарифов; кэш на запрос экономит повторные чтения.
 	planCache := make(map[string]struct {
 		title    string
 		price    float64
@@ -301,8 +298,6 @@ type blockRequest struct {
 
 const maxBlockReasonLen = 500
 
-// handleBlockUser блокирует пользователя и сразу отзывает доступ: клиент
-// удаляется с VPN-панелей, иначе действующий UUID продолжал бы работать.
 func (h *Handler) handleBlockUser(w http.ResponseWriter, r *http.Request) {
 	userID, err := userIDParam(mux.Vars(r)["id"])
 	if err != nil {
@@ -347,8 +342,6 @@ func (h *Handler) handleBlockUser(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// revokeAccess снимает пиры с панелей и деактивирует их локально. Ошибки на
-// отдельных серверах не отменяют блокировку — они попадают в ответ и в лог.
 func (h *Handler) revokeAccess(ctx context.Context, userID int64) (revoked int, failed []string) {
 	failed = []string{}
 
@@ -363,7 +356,7 @@ func (h *Handler) revokeAccess(ctx context.Context, userID int64) (revoked int, 
 	}
 
 	for _, sub := range peer.Subs {
-		if err := h.serversService.DeletePeerFromServer(ctx, sub.ServerID, peer.UUID); err != nil {
+		if err := h.serversService.DeletePeerFromServer(ctx, sub.ServerID, peer.Email); err != nil {
 			h.logger.Errorf("admin: failed to remove peer of user %d from server %s: %v", userID, sub.ServerID, err)
 			failed = append(failed, sub.Location)
 			continue
@@ -378,8 +371,6 @@ func (h *Handler) revokeAccess(ctx context.Context, userID int64) (revoked int, 
 	return revoked, failed
 }
 
-// handleUnblockUser снимает блокировку и, если подписка ещё активна,
-// возвращает пользователю доступ.
 func (h *Handler) handleUnblockUser(w http.ResponseWriter, r *http.Request) {
 	userID, err := userIDParam(mux.Vars(r)["id"])
 	if err != nil {
