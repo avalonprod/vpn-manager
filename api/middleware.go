@@ -139,10 +139,10 @@ func (h *Handler) AccessGuard(next http.Handler) http.Handler {
 	return h.BlockGuard(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		const op = "AccessGuard"
 
-		userID, err := strconv.ParseInt(r.URL.Query().Get("user_id"), 10, 64)
-		if err != nil {
-			h.logger.Warnf("%s: invalid user_id: %v error: %w", op, userID, err)
-			http.Error(w, "invalid user_id", http.StatusBadRequest)
+		userID, ok := userIDFrom(r.Context())
+		if !ok {
+			h.logger.Warnf("%s: request without an identified user", op)
+			http.Error(w, "invalid link", http.StatusNotFound)
 			return
 		}
 

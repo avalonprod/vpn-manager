@@ -110,6 +110,87 @@ func TestIdentifyAcceptsUserIDOnlyWhenLegacyEnabled(t *testing.T) {
 	}
 }
 
+type stubUsers struct{ blocked bool }
+
+func (s stubUsers) IsBlocked(context.Context, int64) (bool, error) { return s.blocked, nil }
+
+type stubSubs struct{ active bool }
+
+func (s stubSubs) IsSubscriptionActive(context.Context, int64) (bool, error) {
+	return s.active, nil
+}
+
+func (s stubSubs) CreateOrExtend(context.Context, int64, string) error { return nil }
+
+func TestAccessGuardWorksWithTokenOnlyLinks(t *testing.T) {
+	code, userID := guardedRequestVia(t, "access", "/setup?token=good-token&os=ios", false, true)
+
+	if code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 — a token-only link must pass AccessGuard", code)
+	}
+
+	if userID != 777 {
+		t.Errorf("userID = %d, want 777", userID)
+	}
+}
+
+func TestAccessGuardBlocksBlockedUser(t *testing.T) {
+	code, _ := guardedRequestVia(t, "access", "/subs?token=good-token", true, true)
+
+	if code != http.StatusForbidden {
+		t.Errorf("status = %d, want 403", code)
+	}
+}
+
+func TestAccessGuardRejectsInactiveSubscription(t *testing.T) {
+	code, _ := guardedRequestVia(t, "access", "/subs?token=good-token", false, false)
+
+	if code != http.StatusForbidden {
+		t.Errorf("status = %d, want 403", code)
+	}
+}
+
+func TestBlockGuardWorksWithTokenOnlyLinks(t *testing.T) {
+	code, userID := guardedRequestVia(t, "block", "/apps?token=good-token&os=ios", false, false)
+
+	if code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 — /apps must work without a subscription", code)
+	}
+
+	if userID != 777 {
+		t.Errorf("userID = %d, want 777", userID)
+	}
+}
+
+func guardedRequestVia(t *testing.T, kind, target string, blocked, active bool) (int, int64) {
+	t.Helper()
+
+	h := &Handler{
+		logger:               nopLogger{},
+		usersService:         stubUsers{blocked: blocked},
+		subscriptionsService: stubSubs{active: active},
+		peersService: stubPeers{byToken: map[string]peers.Peer{
+			"good-token": {UserID: 777},
+		}},
+	}
+
+	guard := h.BlockGuard
+	if kind == "access" {
+		guard = h.AccessGuard
+	}
+
+	var seen int64
+
+	wrapped := guard(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		seen, _ = userIDFrom(r.Context())
+	}))
+
+	rec := httptest.NewRecorder()
+	wrapped.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, target, nil))
+
+	return rec.Code, seen
+}
+
 func TestIdentifyRejectsGarbageLegacyUserID(t *testing.T) {
 	code, _, ok := identifyWith(t, true, "/subs?user_id=not-a-number")
 
