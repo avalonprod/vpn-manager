@@ -350,10 +350,38 @@ func (h *Handler) handleBreakdown(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	locationsResult := make([]locationBreakdown, 0, len(locations))
-	for _, c := range locations {
-		locationsResult = append(locationsResult, locationBreakdown{Location: c.Location, Peers: c.Count})
+	serverList, err := h.serversService.GetAll(ctx)
+	if err != nil {
+		h.logger.Errorf("admin: failed to load servers: %v", err)
+		writeError(w, http.StatusInternalServerError, "failed to load analytics")
+		return
 	}
+
+	locationByServer := make(map[string]string, len(serverList))
+	for _, server := range serverList {
+		locationByServer[server.ID] = server.Location
+	}
+
+	peersByLocation := make(map[string]int64, len(serverList))
+	for _, c := range locations {
+		location, exists := locationByServer[c.ServerID]
+		if !exists {
+			continue
+		}
+		peersByLocation[location] += c.Count
+	}
+
+	locationsResult := make([]locationBreakdown, 0, len(peersByLocation))
+	for location, count := range peersByLocation {
+		locationsResult = append(locationsResult, locationBreakdown{Location: location, Peers: count})
+	}
+
+	sort.Slice(locationsResult, func(i, j int) bool {
+		if locationsResult[i].Peers != locationsResult[j].Peers {
+			return locationsResult[i].Peers > locationsResult[j].Peers
+		}
+		return locationsResult[i].Location < locationsResult[j].Location
+	})
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"plans":     plansResult,

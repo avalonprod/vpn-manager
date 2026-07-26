@@ -158,7 +158,16 @@ func (s *store) CountByLocation(ctx context.Context) ([]LocationCount, error) {
 		{{Key: "$match", Value: bson.M{"is_active": true}}},
 		{{Key: "$unwind", Value: "$subs"}},
 		{{Key: "$match", Value: bson.M{"subs.enabled": true}}},
-		{{Key: "$group", Value: bson.M{"_id": "$subs.location", "count": bson.M{"$sum": 1}}}},
+		{{Key: "$group", Value: bson.M{
+			"_id":   bson.M{"server_id": "$subs.server_id", "location": "$subs.location"},
+			"count": bson.M{"$sum": 1},
+		}}},
+		{{Key: "$project", Value: bson.M{
+			"_id":       0,
+			"server_id": "$_id.server_id",
+			"location":  "$_id.location",
+			"count":     1,
+		}}},
 		{{Key: "$sort", Value: bson.M{"count": -1}}},
 	}
 

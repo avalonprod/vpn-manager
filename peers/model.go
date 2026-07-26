@@ -28,6 +28,7 @@ type Totals struct {
 }
 
 type LocationCount struct {
-	Location string `bson:"_id" json:"location"`
+	ServerID string `bson:"server_id" json:"server_id"`
+	Location string `bson:"location" json:"location"`
 	Count    int64  `bson:"count" json:"count"`
 }

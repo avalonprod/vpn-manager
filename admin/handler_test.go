@@ -59,7 +59,7 @@ type stubServers struct {
 }
 
 func (s *stubServers) GetAll(context.Context) ([]servers.Server, error) {
-	return []servers.Server{}, nil
+	return []servers.Server{{ID: "srv1", Location: "Amsterdam"}}, nil
 }
 func (s *stubServers) GetByID(context.Context, string) (servers.Server, error) {
 	return servers.Server{}, servers.ErrServerNotFound
@@ -167,8 +167,12 @@ func (s *stubPeers) DeactivatePeer(_ context.Context, userID int64) error {
 func (s *stubPeers) Totals(context.Context) (peers.Totals, error) {
 	return peers.Totals{Total: 8, Imported: 4}, nil
 }
+
 func (s *stubPeers) CountByLocation(context.Context) ([]peers.LocationCount, error) {
-	return []peers.LocationCount{}, nil
+	return []peers.LocationCount{
+		{ServerID: "srv1", Location: "Amsterdam", Count: 7},
+		{ServerID: "deleted-srv", Location: "Vilnius", Count: 111},
+	}, nil
 }
 
 type nopLogger struct{}
@@ -383,6 +387,30 @@ func TestInvalidUserIDIsRejected(t *testing.T) {
 	rec := f.do(t, http.MethodPost, "/admin/api/v1/users/not-a-number/block", f.login(t), "")
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", rec.Code)
+	}
+}
+
+func TestBreakdownExcludesDeletedServers(t *testing.T) {
+	f := newFixture(t)
+
+	rec := f.do(t, http.MethodGet, "/admin/api/v1/analytics/breakdown", f.login(t), "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body)
+	}
+
+	var response struct {
+		Locations []locationBreakdown `json:"locations"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if len(response.Locations) != 1 {
+		t.Fatalf("locations = %+v, want only the existing server", response.Locations)
+	}
+
+	if response.Locations[0].Location != "Amsterdam" || response.Locations[0].Peers != 7 {
+		t.Errorf("locations[0] = %+v, want {Amsterdam 7}", response.Locations[0])
 	}
 }
 

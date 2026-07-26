@@ -65,10 +65,10 @@ func (h *Handler) handleListServers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	loadByLocation := map[string]int64{}
+	loadByServer := map[string]int64{}
 	if counts, err := h.peersService.CountByLocation(r.Context()); err == nil {
 		for _, c := range counts {
-			loadByLocation[c.Location] = c.Count
+			loadByServer[c.ServerID] += c.Count
 		}
 	} else {
 		h.logger.Errorf("admin: failed to count peers by location: %v", err)
@@ -83,7 +83,7 @@ func (h *Handler) handleListServers(w http.ResponseWriter, r *http.Request) {
 	for _, server := range list {
 		items = append(items, item{
 			serverResponse: toServerResponse(server),
-			Peers:          loadByLocation[server.Location],
+			Peers:          loadByServer[server.ID],
 		})
 	}
 
