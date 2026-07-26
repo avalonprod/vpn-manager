@@ -169,14 +169,16 @@ func (h *Handler) downloadApp(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, appUrl, http.StatusTemporaryRedirect)
 }
 
+const profileName = "NeonGuard"
+
 func (h *Handler) subscriptionURL(r *http.Request) string {
 	query := r.URL.Query()
 
 	if token := query.Get("token"); token != "" {
-		return fmt.Sprintf("%s/subs?token=%s&name=NeonGuard", h.apiUrl, url.QueryEscape(token))
+		return fmt.Sprintf("%s/subs?token=%s&name=%s", h.apiUrl, url.QueryEscape(token), profileName)
 	}
 
-	return fmt.Sprintf("%s/subs?user_id=%s&name=NeonGuard", h.apiUrl, url.QueryEscape(query.Get("user_id")))
+	return fmt.Sprintf("%s/subs?user_id=%s&name=%s", h.apiUrl, url.QueryEscape(query.Get("user_id")), profileName)
 }
 
 func (h *Handler) setup(w http.ResponseWriter, r *http.Request) {
@@ -205,7 +207,7 @@ func (h *Handler) setup(w http.ResponseWriter, r *http.Request) {
 	case "ios", "macos":
 		deep = fmt.Sprintf("streisand://import/%s", subsURL)
 	case "android":
-		deep = fmt.Sprintf("hiddify://import/%s", subsURL)
+		deep = fmt.Sprintf("hiddify://import/%s#%s", subsURL, url.PathEscape(profileName))
 	}
 
 	http.Redirect(w, r, deep, http.StatusTemporaryRedirect)
