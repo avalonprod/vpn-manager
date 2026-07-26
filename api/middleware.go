@@ -57,6 +57,22 @@ func (h *Handler) AccessGuard(next http.Handler) http.Handler {
 			http.Error(w, "invalid user_id", http.StatusBadRequest)
 			return
 		}
+
+		// Блокировка проверяется раньше подписки: заблокированный пользователь
+		// не должен получить конфиги даже с оплаченной подпиской.
+		blocked, err := h.usersService.IsBlocked(r.Context(), userID)
+		if err != nil {
+			h.logger.Errorf("%s: failed to check block status for user_id: %d error: %w", op, userID, err)
+			http.Error(w, "failed to check access", http.StatusInternalServerError)
+			return
+		}
+
+		if blocked {
+			h.logger.Warnf("%s: blocked user_id: %d tried to access", op, userID)
+			http.Error(w, "access denied", http.StatusForbidden)
+			return
+		}
+
 		isActive, err := h.subscriptionsService.IsSubscriptionActive(r.Context(), userID)
 		if err != nil {
 			if errors.Is(err, subscriptions.ErrSubscriptionNotFound) {

@@ -37,6 +37,10 @@ type ISubscriptionsService interface {
 	IsSubscriptionActive(ctx context.Context, userID int64) (bool, error)
 }
 
+type IUsersService interface {
+	IsBlocked(ctx context.Context, userID int64) (bool, error)
+}
+
 type ITasksService interface {
 	Enqueue(ctx context.Context, task tasks.Task) error
 }
@@ -47,31 +51,57 @@ type IBot interface {
 	SendSuccessPayment(userID int64) error
 }
 
+// AdminRoutes регистрирует маршруты админ-панели на общем роутере.
+type AdminRoutes interface {
+	RegisterRoutes(router *mux.Router)
+}
+
 type Handler struct {
 	peersService         IPeersService
 	plansService         IPlansService
 	paymentsService      IPaymentsService
 	subscriptionsService ISubscriptionsService
+	usersService         IUsersService
 	tasksService         ITasksService
 	bot                  IBot
 	logger               logger.ILogger
 	apiUrl               string
 	cloudPaymentsSecret  string
 	apps                 config.Apps
+	admin                AdminRoutes
 }
 
-func NewHandler(peersService IPeersService, plansService IPlansService, paymentsService IPaymentsService, subscriptionsService ISubscriptionsService, tasksService ITasksService, cloudPaymentsSecret string, bot IBot, logger logger.ILogger, apiUrl string, apps config.Apps) *Handler {
+type Deps struct {
+	Peers         IPeersService
+	Plans         IPlansService
+	Payments      IPaymentsService
+	Subscriptions ISubscriptionsService
+	Users         IUsersService
+	Tasks         ITasksService
+	Bot           IBot
+	Logger        logger.ILogger
+	ApiUrl        string
+	CloudPayments string
+	Apps          config.Apps
+	// Admin необязателен: если панель выключена в конфиге, он равен nil и
+	// маршруты /admin не появляются.
+	Admin AdminRoutes
+}
+
+func NewHandler(deps Deps) *Handler {
 	return &Handler{
-		peersService:         peersService,
-		plansService:         plansService,
-		paymentsService:      paymentsService,
-		subscriptionsService: subscriptionsService,
-		cloudPaymentsSecret:  cloudPaymentsSecret,
-		tasksService:         tasksService,
-		bot:                  bot,
-		logger:               logger,
-		apiUrl:               apiUrl,
-		apps:                 apps,
+		peersService:         deps.Peers,
+		plansService:         deps.Plans,
+		paymentsService:      deps.Payments,
+		subscriptionsService: deps.Subscriptions,
+		usersService:         deps.Users,
+		cloudPaymentsSecret:  deps.CloudPayments,
+		tasksService:         deps.Tasks,
+		bot:                  deps.Bot,
+		logger:               deps.Logger,
+		apiUrl:               deps.ApiUrl,
+		apps:                 deps.Apps,
+		admin:                deps.Admin,
 	}
 }
 
@@ -84,6 +114,10 @@ func (h *Handler) RegisterRoutes() *mux.Router {
 	r.HandleFunc("/subscribe", h.handleSubscribe).Methods("GET")
 	r.HandleFunc("/cloudpayments/webhook/check", h.handleCheckCloudPaymentsWebhook).Methods("GET")
 	r.HandleFunc("/cloudpayments/webhook/pay", h.handlePayCloudPaymentsWebhook).Methods("POST")
+
+	if h.admin != nil {
+		h.admin.RegisterRoutes(r)
+	}
 
 	return r
 }

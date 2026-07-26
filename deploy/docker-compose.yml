@@ -13,15 +13,3 @@ services:
       - ../.env
     volumes:
       - ./.bin/:/app/
-
-  analytics:
-    image: analytics
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.analytics
-    container_name: vpn-manager-analytics
-    restart: always
-    env_file:
-      - ../.env
-    volumes:
-      - ./.bin/:/analytics/

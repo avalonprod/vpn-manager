@@ -17,6 +17,9 @@ type IStore interface {
 	SetActive(ctx context.Context, userID int64) error
 	Deactivate(ctx context.Context, userID int64) error
 	SetImported(ctx context.Context, userID int64, val bool, importedAt time.Time) error
+	Totals(ctx context.Context) (Totals, error)
+	CountByLocation(ctx context.Context) ([]LocationCount, error)
+	GetPeersForUsers(ctx context.Context, userIDs []int64) (map[int64]Peer, error)
 }
 
 type service struct {
@@ -99,4 +102,16 @@ func (s *service) DeletePeersByUserID(ctx context.Context, userID int64) error {
 
 func (s *service) SetImported(ctx context.Context, userID int64) error {
 	return s.store.SetImported(ctx, userID, true, time.Now().UTC())
+}
+
+func (s *service) Totals(ctx context.Context) (Totals, error) {
+	return s.store.Totals(ctx)
+}
+
+func (s *service) CountByLocation(ctx context.Context) ([]LocationCount, error) {
+	return s.store.CountByLocation(ctx)
+}
+
+func (s *service) GetPeersForUsers(ctx context.Context, userIDs []int64) (map[int64]Peer, error) {
+	return s.store.GetPeersForUsers(ctx, userIDs)
 }

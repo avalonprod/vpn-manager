@@ -19,6 +19,11 @@ type IStore interface {
 	DeactivateSubscription(ctx context.Context, userID int64, ID string) error
 	CancelSubscription(ctx context.Context, userID int64) error
 	GetAllTrialSubscriptions(ctx context.Context) ([]Subscription, error)
+	Totals(ctx context.Context) (Totals, error)
+	CountByPlan(ctx context.Context) ([]PlanCount, error)
+	CreatedByDay(ctx context.Context, since time.Time, trialOnly *bool) ([]DailyCount, error)
+	List(ctx context.Context, activeOnly bool, limit, offset int) ([]Subscription, int64, error)
+	GetSubscriptionsForUsers(ctx context.Context, userIDs []int64) (map[int64]Subscription, error)
 }
 
 type ITasksService interface {
@@ -167,4 +172,35 @@ func (s *service) IsSubscriptionActive(ctx context.Context, userID int64) (bool,
 
 func (s *service) CancelSubscription(ctx context.Context, userID int64) error {
 	return s.store.CancelSubscription(ctx, userID)
+}
+
+func (s *service) Totals(ctx context.Context) (Totals, error) {
+	return s.store.Totals(ctx)
+}
+
+func (s *service) CountByPlan(ctx context.Context) ([]PlanCount, error) {
+	return s.store.CountByPlan(ctx)
+}
+
+func (s *service) CreatedByDay(ctx context.Context, since time.Time, trialOnly *bool) ([]DailyCount, error) {
+	return s.store.CreatedByDay(ctx, since, trialOnly)
+}
+
+func (s *service) List(ctx context.Context, activeOnly bool, limit, offset int) ([]Subscription, int64, error) {
+	return s.store.List(ctx, activeOnly, limit, offset)
+}
+
+func (s *service) GetSubscriptionsForUsers(ctx context.Context, userIDs []int64) (map[int64]Subscription, error) {
+	return s.store.GetSubscriptionsForUsers(ctx, userIDs)
+}
+
+// Deactivate снимает активность с подписки пользователя — используется при
+// блокировке пользователя из админ-панели.
+func (s *service) Deactivate(ctx context.Context, userID int64) error {
+	sub, err := s.store.GetByUserID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	return s.store.DeactivateSubscription(ctx, userID, sub.ID)
 }

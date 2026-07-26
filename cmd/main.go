@@ -2,12 +2,14 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+	"vpn-manager/admin"
 	"vpn-manager/api"
 	"vpn-manager/bot"
 	"vpn-manager/core/config"
@@ -35,15 +37,15 @@ func main() {
 	defer cancel()
 
 	pref := telebot.Settings{
-		Token: cfg.TelegramAccessToken,
-		Poller: &telebot.Webhook{
-			Listen:           fmt.Sprintf(":%s", cfg.TelegramWebhookPort),
-			SecretToken:      cfg.TelegramWebhookToken,
-			IgnoreSetWebhook: true,
-			Endpoint: &telebot.WebhookEndpoint{
-				PublicURL: fmt.Sprintf("%s/webhook", cfg.ApiUrl),
-			},
-		},
+		Token: "7597686428:AAEP_D5vzwuRjprtNKZ_jeQC7Fzx7mz-Bv4",
+		// Poller: &telebot.Webhook{
+		// Listen:           fmt.Sprintf(":%s", cfg.TelegramWebhookPort),
+		// SecretToken:      cfg.TelegramWebhookToken,
+		// IgnoreSetWebhook: true,
+		// Endpoint: &telebot.WebhookEndpoint{
+		// 	PublicURL: fmt.Sprintf("%s/webhook", cfg.ApiUrl),
+		// },
+		// },
 		ParseMode: telebot.ModeHTML,
 	}
 
@@ -76,7 +78,37 @@ func main() {
 	stackStore := bot.NewStackScreens(mongodb)
 	bot := bot.NewBot(b, *stackStore, logger, usersService, serversService, peersService, plansService, subscriptionsService, tasksService, cfg.ApiUrl)
 
-	handler := api.NewHandler(peersService, plansService, paymentsService, subscriptionsService, tasksService, cfg.CloudPayments.SecretKey, bot, logger, cfg.ApiUrl, cfg.Apps)
+	// Админ-панель поднимается только при заданных учётных данных в .env.
+	var adminHandler api.AdminRoutes
+	if cfg.Admin.Enabled {
+		admin.SetTrustProxyHeaders(os.Getenv("ADMIN_TRUST_PROXY") == "true")
+		adminHandler = admin.NewHandler(cfg.Admin, admin.Deps{
+			Users:         usersService,
+			Servers:       serversService,
+			Plans:         plansService,
+			Subscriptions: subscriptionsService,
+			Payments:      paymentsService,
+			Peers:         peersService,
+			Audit:         admin.NewAuditStore(mongodb),
+			Logger:        logger,
+		})
+		logger.Infof("admin panel enabled at %s/admin/api/v1", cfg.ApiUrl)
+	}
+
+	handler := api.NewHandler(api.Deps{
+		Peers:         peersService,
+		Plans:         plansService,
+		Payments:      paymentsService,
+		Subscriptions: subscriptionsService,
+		Users:         usersService,
+		Tasks:         tasksService,
+		Bot:           bot,
+		Logger:        logger,
+		ApiUrl:        cfg.ApiUrl,
+		CloudPayments: cfg.CloudPayments.SecretKey,
+		Apps:          cfg.Apps,
+		Admin:         adminHandler,
+	})
 
 	srv := server.NewServer(&server.HttpConfig{
 		Port: cfg.Port,
@@ -141,7 +173,16 @@ func main() {
 	// ===============================
 
 	go jobs.RunDisableExpiredAccess(ctx, subscriptionsService, peersService, serversService, bot, logger)
-	go srv.Run()
+
+	// Ошибку старта HTTP-сервера нельзя терять: при занятом порте процесс иначе
+	// продолжает работать без API, а клиенты получают connection refused без
+	// каких-либо следов в логах.
+	go func() {
+		if err := srv.Run(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("http server stopped: %v", err)
+		}
+	}()
+
 	go bot.Run()
 
 	quit := make(chan os.Signal, 1)

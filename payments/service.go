@@ -18,6 +18,12 @@ type IStore interface {
 	GetByID(ctx context.Context, userID int64, ID string) (Invoice, error)
 	SetStatus(ctx context.Context, userID int64, ID, status string) error
 	GetAllCompletedInvoices(ctx context.Context) ([]Invoice, error)
+	List(ctx context.Context, f ListFilter) ([]Invoice, int64, error)
+	GetByUserID(ctx context.Context, userID int64, limit int) ([]Invoice, error)
+	CountByStatus(ctx context.Context, status string) (int64, error)
+	RevenueSince(ctx context.Context, since time.Time) (float64, error)
+	RevenueByDay(ctx context.Context, since time.Time) ([]DailyRevenue, error)
+	RevenueByPlan(ctx context.Context, since time.Time) ([]PlanRevenue, error)
 }
 
 type IPlansService interface {
@@ -137,4 +143,47 @@ func (s *service) GetInvoiceByID(ctx context.Context, userID int64, ID string) (
 
 func (s *service) SetStatus(ctx context.Context, userID int64, ID, status string) error {
 	return s.store.SetStatus(ctx, userID, ID, status)
+}
+
+func (s *service) List(ctx context.Context, f ListFilter) ([]Invoice, int64, error) {
+	return s.store.List(ctx, f)
+}
+
+func (s *service) GetByUserID(ctx context.Context, userID int64, limit int) ([]Invoice, error) {
+	return s.store.GetByUserID(ctx, userID, limit)
+}
+
+func (s *service) RevenueByDay(ctx context.Context, since time.Time) ([]DailyRevenue, error) {
+	return s.store.RevenueByDay(ctx, since)
+}
+
+func (s *service) RevenueByPlan(ctx context.Context, since time.Time) ([]PlanRevenue, error) {
+	return s.store.RevenueByPlan(ctx, since)
+}
+
+func (s *service) Totals(ctx context.Context) (Totals, error) {
+	var totals Totals
+	var err error
+
+	if totals.Total, err = s.store.CountByStatus(ctx, ""); err != nil {
+		return Totals{}, err
+	}
+
+	if totals.Completed, err = s.store.CountByStatus(ctx, StatusCompleted); err != nil {
+		return Totals{}, err
+	}
+
+	if totals.Pending, err = s.store.CountByStatus(ctx, StatusPending); err != nil {
+		return Totals{}, err
+	}
+
+	if totals.Revenue, err = s.store.RevenueSince(ctx, time.Time{}); err != nil {
+		return Totals{}, err
+	}
+
+	return totals, nil
+}
+
+func (s *service) RevenueSince(ctx context.Context, since time.Time) (float64, error) {
+	return s.store.RevenueSince(ctx, since)
 }

@@ -8,6 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 const subscriptionsCollection = "subscriptions"
@@ -219,4 +220,124 @@ func (s *store) CountTrialSubscriptions(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	return count, nil
+}
+
+func (s *store) Totals(ctx context.Context) (Totals, error) {
+	var totals Totals
+
+	counts := []struct {
+		target *int64
+		filter bson.M
+	}{
+		{&totals.Total, bson.M{}},
+		{&totals.Active, bson.M{"active": true}},
+		{&totals.ActiveTrial, bson.M{"active": true, "is_trial": true}},
+		{&totals.ActivePaid, bson.M{"active": true, "is_trial": bson.M{"$ne": true}}},
+		{&totals.AutoRenewal, bson.M{"active": true, "auto_renewal": true}},
+		{&totals.ExpiringIn3d, bson.M{"active": true, "expires_at": bson.M{
+			"$gte": time.Now().UTC(),
+			"$lte": time.Now().UTC().Add(72 * time.Hour),
+		}}},
+	}
+
+	for _, c := range counts {
+		count, err := s.db.CountDocuments(ctx, c.filter)
+		if err != nil {
+			return Totals{}, err
+		}
+		*c.target = count
+	}
+
+	return totals, nil
+}
+
+// CountByPlan показывает распределение активных подписок по тарифам.
+func (s *store) CountByPlan(ctx context.Context) ([]PlanCount, error) {
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"active": true}}},
+		{{Key: "$group", Value: bson.M{"_id": "$plan_id", "count": bson.M{"$sum": 1}}}},
+		{{Key: "$sort", Value: bson.M{"count": -1}}},
+	}
+
+	cursor, err := s.db.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	result := make([]PlanCount, 0)
+	if err := cursor.All(ctx, &result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// CreatedByDay возвращает число новых подписок по дням в UTC начиная с since.
+func (s *store) CreatedByDay(ctx context.Context, since time.Time, trialOnly *bool) ([]DailyCount, error) {
+	match := bson.M{"created_at": bson.M{"$gte": since}}
+	if trialOnly != nil {
+		if *trialOnly {
+			match["is_trial"] = true
+		} else {
+			match["is_trial"] = bson.M{"$ne": true}
+		}
+	}
+
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: match}},
+		{{Key: "$group", Value: bson.M{
+			"_id": bson.M{"$dateToString": bson.M{
+				"format":   "%Y-%m-%d",
+				"date":     "$created_at",
+				"timezone": "UTC",
+			}},
+			"count": bson.M{"$sum": 1},
+		}}},
+		{{Key: "$sort", Value: bson.M{"_id": 1}}},
+	}
+
+	cursor, err := s.db.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	result := make([]DailyCount, 0)
+	if err := cursor.All(ctx, &result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// List отдаёт подписки постранично, свежие сверху.
+func (s *store) List(ctx context.Context, activeOnly bool, limit, offset int) ([]Subscription, int64, error) {
+	filter := bson.M{}
+	if activeOnly {
+		filter["active"] = true
+	}
+
+	opts := options.Find().
+		SetSort(bson.D{{Key: "created_at", Value: -1}}).
+		SetSkip(int64(offset)).
+		SetLimit(int64(limit))
+
+	cursor, err := s.db.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer cursor.Close(ctx)
+
+	subs := make([]Subscription, 0, limit)
+	if err := cursor.All(ctx, &subs); err != nil {
+		return nil, 0, err
+	}
+
+	total, err := s.db.CountDocuments(ctx, filter)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return subs, total, nil
 }

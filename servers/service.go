@@ -8,12 +8,22 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strings"
+	"sync"
+	"time"
 	"vpn-manager/peers"
+
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 type IStore interface {
 	GetAllActiveServers(ctx context.Context) ([]Server, error)
+	GetAll(ctx context.Context) ([]Server, error)
 	GetByID(ctx context.Context, serverID string) (Server, error)
+	Create(ctx context.Context, server Server) (string, error)
+	Update(ctx context.Context, serverID string, fields bson.M) error
+	Delete(ctx context.Context, serverID string) error
+	Count(ctx context.Context) (total int64, active int64, err error)
 }
 
 type IPeersService interface {
@@ -124,8 +134,191 @@ func (s *service) GetAllActiveServers(ctx context.Context) ([]Server, error) {
 	return s.store.GetAllActiveServers(ctx)
 }
 
+func (s *service) GetAll(ctx context.Context) ([]Server, error) {
+	return s.store.GetAll(ctx)
+}
+
 func (s *service) GetByID(ctx context.Context, serverID string) (Server, error) {
 	return s.store.GetByID(ctx, serverID)
+}
+
+func (s *service) Count(ctx context.Context) (total int64, active int64, err error) {
+	return s.store.Count(ctx)
+}
+
+func validateCreateInput(input CreateInput) error {
+	switch {
+	case strings.TrimSpace(input.Location) == "":
+		return fmt.Errorf("%w: location is required", ErrInvalidInput)
+	case strings.TrimSpace(input.Ip) == "":
+		return fmt.Errorf("%w: ip is required", ErrInvalidInput)
+	case strings.TrimSpace(input.ApiUrl) == "":
+		return fmt.Errorf("%w: api_url is required", ErrInvalidInput)
+	case strings.TrimSpace(input.Username) == "":
+		return fmt.Errorf("%w: username is required", ErrInvalidInput)
+	case input.Port <= 0 || input.Port > 65535:
+		return fmt.Errorf("%w: port must be between 1 and 65535", ErrInvalidInput)
+	case input.MaxClients < 0:
+		return fmt.Errorf("%w: max_clients must not be negative", ErrInvalidInput)
+	}
+
+	return nil
+}
+
+func (s *service) Create(ctx context.Context, input CreateInput) (Server, error) {
+	if err := validateCreateInput(input); err != nil {
+		return Server{}, err
+	}
+
+	server := Server{
+		Location:   strings.TrimSpace(input.Location),
+		Username:   strings.TrimSpace(input.Username),
+		Host:       strings.TrimSpace(input.Host),
+		Port:       input.Port,
+		Ip:         strings.TrimSpace(input.Ip),
+		ApiUrl:     strings.TrimRight(strings.TrimSpace(input.ApiUrl), "/"),
+		InBoundID:  input.InBoundID,
+		MaxClients: input.MaxClients,
+		IsActive:   input.IsActive,
+		Security:   input.Security,
+	}
+
+	id, err := s.store.Create(ctx, server)
+	if err != nil {
+		return Server{}, err
+	}
+
+	server.ID = id
+
+	return server, nil
+}
+
+func (s *service) Update(ctx context.Context, serverID string, input UpdateInput) (Server, error) {
+	fields := bson.M{}
+
+	if input.Location != nil {
+		location := strings.TrimSpace(*input.Location)
+		if location == "" {
+			return Server{}, fmt.Errorf("%w: location must not be empty", ErrInvalidInput)
+		}
+		fields["location"] = location
+	}
+	if input.Username != nil {
+		fields["username"] = strings.TrimSpace(*input.Username)
+	}
+	if input.Host != nil {
+		fields["host"] = strings.TrimSpace(*input.Host)
+	}
+	if input.Port != nil {
+		if *input.Port <= 0 || *input.Port > 65535 {
+			return Server{}, fmt.Errorf("%w: port must be between 1 and 65535", ErrInvalidInput)
+		}
+		fields["port"] = *input.Port
+	}
+	if input.Ip != nil {
+		fields["ip"] = strings.TrimSpace(*input.Ip)
+	}
+	if input.ApiUrl != nil {
+		fields["api_url"] = strings.TrimRight(strings.TrimSpace(*input.ApiUrl), "/")
+	}
+	if input.InBoundID != nil {
+		fields["inbound_id"] = *input.InBoundID
+	}
+	if input.MaxClients != nil {
+		if *input.MaxClients < 0 {
+			return Server{}, fmt.Errorf("%w: max_clients must not be negative", ErrInvalidInput)
+		}
+		fields["max_clients"] = *input.MaxClients
+	}
+	if input.IsActive != nil {
+		fields["is_active"] = *input.IsActive
+	}
+	if input.Security != nil {
+		fields["security"] = *input.Security
+	}
+
+	if err := s.store.Update(ctx, serverID, fields); err != nil {
+		return Server{}, err
+	}
+
+	return s.store.GetByID(ctx, serverID)
+}
+
+func (s *service) Delete(ctx context.Context, serverID string) error {
+	return s.store.Delete(ctx, serverID)
+}
+
+const healthCheckTimeout = 7 * time.Second
+
+// CheckHealth логинится в панель сервера и сообщает, отвечает ли она.
+func (s *service) CheckHealth(ctx context.Context, serverID string) (Health, error) {
+	server, err := s.store.GetByID(ctx, serverID)
+	if err != nil {
+		return Health{}, err
+	}
+
+	return s.checkServer(ctx, server), nil
+}
+
+// CheckAllHealth параллельно проверяет все серверы.
+func (s *service) CheckAllHealth(ctx context.Context) ([]Health, error) {
+	servers, err := s.store.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]Health, len(servers))
+
+	var wg sync.WaitGroup
+	for i, server := range servers {
+		wg.Add(1)
+		go func(i int, server Server) {
+			defer wg.Done()
+			results[i] = s.checkServer(ctx, server)
+		}(i, server)
+	}
+	wg.Wait()
+
+	return results, nil
+}
+
+func (s *service) checkServer(ctx context.Context, server Server) Health {
+	health := Health{ServerID: server.ID, Location: server.Location}
+
+	ctx, cancel := context.WithTimeout(ctx, healthCheckTimeout)
+	defer cancel()
+
+	form := url.Values{
+		"username": {server.Username},
+		"password": {s.ServerPanelPassword},
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		server.ApiUrl+"/login", strings.NewReader(form.Encode()))
+	if err != nil {
+		health.Error = "invalid api url"
+		return health
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	started := time.Now()
+
+	resp, err := (&http.Client{Timeout: healthCheckTimeout}).Do(req)
+	health.LatencyMs = time.Since(started).Milliseconds()
+	if err != nil {
+		health.Error = "panel is unreachable"
+		return health
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		health.Error = fmt.Sprintf("panel responded with status %d", resp.StatusCode)
+		return health
+	}
+
+	health.Reachable = true
+
+	return health
 }
 
 func (s *service) DeletePeerFromServer(ctx context.Context, serverID, UUID string) error {

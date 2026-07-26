@@ -130,6 +130,53 @@ func (s *store) SetImported(ctx context.Context, userID int64, val bool, importe
 	return err
 }
 
+func (s *store) Totals(ctx context.Context) (Totals, error) {
+	var totals Totals
+
+	counts := []struct {
+		target *int64
+		filter bson.M
+	}{
+		{&totals.Total, bson.M{}},
+		{&totals.Active, bson.M{"is_active": true}},
+		{&totals.Imported, bson.M{"is_imported": true}},
+	}
+
+	for _, c := range counts {
+		count, err := s.db.CountDocuments(ctx, c.filter)
+		if err != nil {
+			return Totals{}, err
+		}
+		*c.target = count
+	}
+
+	return totals, nil
+}
+
+// CountByLocation считает активные пиры в разрезе локаций серверов.
+func (s *store) CountByLocation(ctx context.Context) ([]LocationCount, error) {
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"is_active": true}}},
+		{{Key: "$unwind", Value: "$subs"}},
+		{{Key: "$match", Value: bson.M{"subs.enabled": true}}},
+		{{Key: "$group", Value: bson.M{"_id": "$subs.location", "count": bson.M{"$sum": 1}}}},
+		{{Key: "$sort", Value: bson.M{"count": -1}}},
+	}
+
+	cursor, err := s.db.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	result := make([]LocationCount, 0)
+	if err := cursor.All(ctx, &result); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
 func (s *store) GetPeersForUsers(ctx context.Context, userIDs []int64) (map[int64]Peer, error) {
 	if len(userIDs) == 0 {
 		return map[int64]Peer{}, nil

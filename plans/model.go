@@ -13,3 +13,27 @@ type Plan struct {
 	Order        int       `bson:"order"`
 	CreatedAt    time.Time `bson:"created_at"`
 }
+
+// CreateInput — параметры создания тарифа из админ-панели.
+// ID необязателен: если пуст, MongoDB сгенерирует его сама.
+type CreateInput struct {
+	ID           string
+	Title        string
+	SubTitle     string
+	Price        float64
+	Currency     string
+	DurationDays int
+	IsActive     bool
+	Order        int
+}
+
+// UpdateInput — частичное обновление тарифа: применяются только не-nil поля.
+type UpdateInput struct {
+	Title        *string
+	SubTitle     *string
+	Price        *float64
+	Currency     *string
+	DurationDays *int
+	IsActive     *bool
+	Order        *int
+}

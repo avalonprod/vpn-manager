@@ -20,3 +20,16 @@ type Peer struct {
 	IsImported bool      `bson:"is_imported"`
 	ImportedAt time.Time `bson:"imported_at,omitempty"`
 }
+
+// Totals — сводка по пирам для дашборда.
+type Totals struct {
+	Total    int64 `json:"total"`
+	Active   int64 `json:"active"`
+	Imported int64 `json:"imported"`
+}
+
+// LocationCount — сколько активных подключений приходится на локацию.
+type LocationCount struct {
+	Location string `bson:"_id" json:"location"`
+	Count    int64  `bson:"count" json:"count"`
+}

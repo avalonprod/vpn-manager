@@ -12,6 +12,7 @@ import (
 
 func (b *Bot) handleStart(c telebot.Context) error {
 	user := c.Sender()
+
 	if err := b.usersService.Register(context.Background(), users.CreateUserInput{
 		ID:        user.ID,
 		Username:  user.Username,
