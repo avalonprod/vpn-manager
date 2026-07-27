@@ -29,8 +29,16 @@ func TestAppleLinkKeepsExistingFormat(t *testing.T) {
 	}
 }
 
+// v2rayN на Windows не регистрирует URL-схему, поэтому ссылки автоимпорта
+// для него не существует — подписка добавляется вручную.
+func TestWindowsHasNoImportLink(t *testing.T) {
+	if link := clientImportLink("windows", testSubsURL); link != "" {
+		t.Errorf("windows produced %q, want an empty link", link)
+	}
+}
+
 func TestUnsupportedOSYieldsNoLink(t *testing.T) {
-	for _, os := range []string{"", "windows", "linux", "ANDROID"} {
+	for _, os := range []string{"", "linux", "ANDROID"} {
 		if link := clientImportLink(os, testSubsURL); link != "" {
 			t.Errorf("os %q produced %q, want an empty link so the handler can refuse", os, link)
 		}

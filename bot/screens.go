@@ -156,6 +156,7 @@ func (b *Bot) BuildAppsListScreen(userID int64) *Screen {
 	keyword.Inline(
 		telebot.Row{
 			{Text: "💻 MacOs", URL: fmt.Sprintf("%s/apps?token=%s&os=macos", b.apiUrl, b.accessToken(userID))},
+			{Text: "🖥 Windows", URL: fmt.Sprintf("%s/apps?token=%s&os=windows", b.apiUrl, b.accessToken(userID))},
 		},
 		telebot.Row{
 			{Text: "📱 iPhone / iPad", URL: fmt.Sprintf("%s/apps?token=%s&os=ios", b.apiUrl, b.accessToken(userID))},
@@ -258,20 +259,30 @@ func (b *Bot) BuildSuccessScreen(ctx context.Context, userID int64, os string) (
 	}, nil
 }
 
+func supportsAutoImport(os string) bool {
+	return os == "ios" || os == "macos" || os == "android"
+}
+
 func (b *Bot) BuildSetupScreen(userID int64, os string) *Screen {
 	keyword := &telebot.ReplyMarkup{}
 
+	action := b.navigateButtonTo("Показать ссылку подписки", ManualSetupScreen, os)
+	if supportsAutoImport(os) {
+		action = telebot.Btn{
+			Text: "Автонастройка",
+			URL:  fmt.Sprintf("%s/setup?token=%s&os=%s", b.apiUrl, b.accessToken(userID), os),
+		}
+	}
+
 	keyword.Inline(
-		telebot.Row{
-			{Text: "Автонастройка", URL: fmt.Sprintf("%s/setup?token=%s&os=%s", b.apiUrl, b.accessToken(userID), os)},
-		},
+		telebot.Row{action},
 		telebot.Row{
 			b.backButton(),
 		},
 	)
 
 	text := `
-🔔 Скачали приложение? Возвращайтесь и запустите работу прокси.	
+🔔 Скачали приложение? Возвращайтесь и запустите работу прокси.
 	`
 
 	return &Screen{
@@ -321,9 +332,43 @@ func (b *Bot) BuildManualSetupScreen(userID int64, os string) *Screen {
 		},
 	)
 
-	url := fmt.Sprintf("%s/subs?token=%s&name=%s", b.apiUrl, b.accessToken(userID), "NeonGuard")
+	url := fmt.Sprintf("%s/subs/%s", b.apiUrl, b.accessToken(userID))
 
-	text := fmt.Sprintf(`
+	var text string
+
+	switch os {
+	case "windows":
+		text = fmt.Sprintf(`
+Настройка на Windows займёт меньше минуты:
+
+1. Скопируй эту ссылку: %s
+
+2. Открой v2rayN.
+
+3. В меню сверху выбери «Подписки» → «Настройки подписок».
+
+4. Нажми «Добавить», вставь ссылку в поле «Адрес» и сохрани.
+
+5. Снова «Подписки» → «Обновить все подписки без прокси».
+
+6. Выбери любой сервер из списка и включи режим «Глобальный» в трее.
+
+7. Если возникли сложности — пиши нам в поддержку, мы оперативно поможем.
+`, url)
+	case "android":
+		text = fmt.Sprintf(`
+Ручная настройка очень простая и займет меньше минуты:
+
+1. Скопируй эту ссылку: %s
+
+2. Зайди в приложение Happ.
+
+3. Нажми на "+" и выбери добавление из буфера обмена.
+
+4. Если возникли сложности — пиши нам в поддержку, мы оперативно поможем.
+`, url)
+	default:
+		text = fmt.Sprintf(`
 Ручная настройка очень простая и займет меньше минуты:
 
 1. Скопируй эту ссылку: %s
@@ -336,6 +381,7 @@ func (b *Bot) BuildManualSetupScreen(userID int64, os string) *Screen {
 
 5. Если возникли сложности — пиши нам в поддержку, мы оперативно поможем.
 `, url)
+	}
 
 	return &Screen{
 		Text:     text,

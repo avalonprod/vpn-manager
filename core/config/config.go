@@ -27,6 +27,7 @@ type (
 	Apps struct {
 		AppStoreURL   string
 		PlayMarketURL string
+		WindowsURL    string
 	}
 	MongoDB struct {
 		URI      string
@@ -62,6 +63,7 @@ func MustLoad() *Config {
 
 	cfg.Apps.AppStoreURL = os.Getenv("APPSTORE_URL")
 	cfg.Apps.PlayMarketURL = os.Getenv("PLAYMARKET_URL")
+	cfg.Apps.WindowsURL = os.Getenv("WINDOWS_URL")
 	cfg.TelegramAccessToken = os.Getenv("TELEGRAM_ACCESS_TOKEN")
 	cfg.TelegramWebhookToken = os.Getenv("TELEGRAM_WEBHOOK_TOKEN")
 	cfg.TelegramWebhookPort = os.Getenv("TELEGRAM_WEBHOOK_PORT")

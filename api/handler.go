@@ -159,12 +159,18 @@ func (h *Handler) downloadApp(w http.ResponseWriter, r *http.Request) {
 
 	var appUrl string
 	switch query.Get("os") {
-	case "ios":
-		appUrl = h.apps.AppStoreURL
-	case "macos":
+	case "ios", "macos":
 		appUrl = h.apps.AppStoreURL
 	case "android":
 		appUrl = h.apps.PlayMarketURL
+	case "windows":
+		appUrl = h.apps.WindowsURL
+	}
+
+	if appUrl == "" {
+		h.logger.Warnf("%s: no download url for os %q", op, query.Get("os"))
+		http.Error(w, "unsupported platform", http.StatusBadRequest)
+		return
 	}
 
 	http.Redirect(w, r, appUrl, http.StatusTemporaryRedirect)
