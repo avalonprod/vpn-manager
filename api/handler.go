@@ -171,6 +171,18 @@ func (h *Handler) downloadApp(w http.ResponseWriter, r *http.Request) {
 
 const profileName = "NeonGuard"
 
+func clientImportLink(os, subsURL string) string {
+	switch os {
+	case "ios", "macos":
+		return fmt.Sprintf("streisand://import/%s", subsURL)
+	case "android":
+		return fmt.Sprintf("hiddify://install-sub?url=%s&name=%s",
+			url.QueryEscape(subsURL), url.QueryEscape(profileName))
+	default:
+		return ""
+	}
+}
+
 func (h *Handler) subscriptionURL(r *http.Request) string {
 	query := r.URL.Query()
 
@@ -199,15 +211,11 @@ func (h *Handler) setup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	subsURL := h.subscriptionURL(r)
-
-	var deep string
-
-	switch query.Get("os") {
-	case "ios", "macos":
-		deep = fmt.Sprintf("streisand://import/%s", subsURL)
-	case "android":
-		deep = fmt.Sprintf("hiddify://import/%s#%s", subsURL, url.PathEscape(profileName))
+	deep := clientImportLink(query.Get("os"), h.subscriptionURL(r))
+	if deep == "" {
+		h.logger.Warnf("%s: unsupported os %q", op, query.Get("os"))
+		http.Error(w, "unsupported platform", http.StatusBadRequest)
+		return
 	}
 
 	http.Redirect(w, r, deep, http.StatusTemporaryRedirect)
