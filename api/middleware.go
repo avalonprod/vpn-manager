@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"vpn-manager/peers"
 	"vpn-manager/subscriptions"
+
+	"github.com/gorilla/mux"
 )
 
 const maxWebhookBody = 1 << 20
@@ -74,7 +76,12 @@ func (h *Handler) Identify(next http.Handler) http.Handler {
 
 		query := r.URL.Query()
 
-		if token := query.Get("token"); token != "" {
+		token := mux.Vars(r)["token"]
+		if token == "" {
+			token = query.Get("token")
+		}
+
+		if token != "" {
 			peer, err := h.peersService.GetByAccessToken(r.Context(), token)
 			if err != nil {
 				if errors.Is(err, peers.ErrPeerNotFound) {

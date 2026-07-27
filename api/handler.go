@@ -111,6 +111,7 @@ func NewHandler(deps Deps) *Handler {
 func (h *Handler) RegisterRoutes() *mux.Router {
 	r := mux.NewRouter()
 
+	r.Handle("/subs/{token}", h.AccessGuard(http.HandlerFunc(h.getSubs))).Methods("GET")
 	r.Handle("/subs", h.AccessGuard(http.HandlerFunc(h.getSubs))).Methods("GET")
 	r.Handle("/setup", h.AccessGuard(http.HandlerFunc(h.setup))).Methods("GET")
 	r.Handle("/apps", h.BlockGuard(http.HandlerFunc(h.downloadApp))).Methods("GET")
@@ -176,8 +177,7 @@ func clientImportLink(os, subsURL string) string {
 	case "ios", "macos":
 		return fmt.Sprintf("streisand://import/%s", subsURL)
 	case "android":
-		return fmt.Sprintf("hiddify://install-sub?url=%s&name=%s",
-			url.QueryEscape(subsURL), url.QueryEscape(profileName))
+		return fmt.Sprintf("happ://add/%s", subsURL)
 	default:
 		return ""
 	}
@@ -187,7 +187,7 @@ func (h *Handler) subscriptionURL(r *http.Request) string {
 	query := r.URL.Query()
 
 	if token := query.Get("token"); token != "" {
-		return fmt.Sprintf("%s/subs?token=%s&name=%s", h.apiUrl, url.QueryEscape(token), profileName)
+		return fmt.Sprintf("%s/subs/%s", h.apiUrl, url.PathEscape(token))
 	}
 
 	return fmt.Sprintf("%s/subs?user_id=%s&name=%s", h.apiUrl, url.QueryEscape(query.Get("user_id")), profileName)
@@ -248,6 +248,10 @@ func (h *Handler) getSubs(w http.ResponseWriter, r *http.Request) {
 	for _, sub := range peer.Subs {
 		subs = append(subs, sub.URL)
 	}
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("profile-title", profileName)
+	w.Header().Set("profile-update-interval", "1")
 
 	if err := h.peersService.SetImported(r.Context(), userID); err != nil {
 		h.logger.Errorf("%s: failed to set imported for user_id: %d error: %w", op, userID, err)
